@@ -45,7 +45,17 @@ export function createApp() {
     }),
   );
 
-  app.use("*", logger());
+  app.use(
+    "*",
+    logger((message) => {
+      // Never log OAuth codes, states, or other sensitive query values.
+      const redacted = message.replace(
+        /(\/api\/auth\/[^\s?]*)\?[^\s]*/g,
+        "$1?[redacted]",
+      );
+      console.log(redacted);
+    }),
+  );
 
   app.on(["GET", "POST"], "/api/auth/*", (c) => auth.handler(c.req.raw));
 
