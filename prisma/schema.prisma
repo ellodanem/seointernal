@@ -239,8 +239,11 @@ model GscPageDaily {
   @@map("gsc_page_daily")
 }
 
-/// Query metrics. scopeType/scopeValue distinguish property-wide vs primary-origin rows.
-/// No schema-level row-count cap — Phase 3 applies API request ceilings and records truncation.
+/// Query metrics for the managed SEO surface.
+/// v0.1 ingest writes ORIGIN-scoped rows only (primaryOrigin). Do not persist
+/// unfiltered PROPERTY query rows until there is a demonstrated use case —
+/// Domain-property queries mix hosts and are easy to misread.
+/// scopeType remains on the model so PROPERTY can be added later without a rewrite.
 model GscQueryDaily {
   id            String             @id @default(cuid())
   projectId     String

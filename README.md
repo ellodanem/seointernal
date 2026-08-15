@@ -69,3 +69,7 @@ npm run dev:worker   # terminal 3 — idle worker
 - Never commit `.env` or service-account JSON.
 - GSC credentials live outside the repo (`GOOGLE_APPLICATION_CREDENTIALS`).
 - App boots without GSC credentials; Phase 2 does not call Search Console.
+
+## Default branch
+
+Local default branch is **`main`** (renamed from `master` before any remote exists).

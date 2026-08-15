@@ -28,6 +28,10 @@ Phase 1 proved a GSC **Domain** property is not the same as the managed SEO surf
 
 Domain properties can include `www`, `app`, protocol variants, and other hosts. Metrics tables use `scopeType` `PROPERTY` | `ORIGIN` plus `scopeValue` so dashboards can separate whole-property diagnostics from primary-origin performance.
 
+**v0.1 persistence policy:** store PROPERTY + ORIGIN **daily totals**, **all** page-level rows (including other hosts), and **ORIGIN-only** query daily rows. Do not persist unfiltered PROPERTY query rows until there is a clear use case (they mix hosts and confuse non-SEO readers). Schema still allows PROPERTY query scope later.
+
+**Dashboard framing (Phase 3+ UI):** main view = primary origin always; separate compact **Other hosts appearing in Google** panel (not a filter dropdown). App-host impressions get a recrawl/grace period after `noindex` before escalating.
+
 Page rows store full `url` + `host` + `path`. There is **no** `marketing | app` surface enum.
 
 ## Schema overview
