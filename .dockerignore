@@ -1,0 +1,14 @@
+.dockerignore
+node_modules
+**/node_modules
+**/dist
+.git
+.env
+.env.*
+!.env.example
+spike-gsc/node_modules
+spike-gsc/out
+**/*.log
+.secrets
+**/*-sa.json
+**/gsc-sa.json

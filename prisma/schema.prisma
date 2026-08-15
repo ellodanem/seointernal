@@ -1,0 +1,363 @@
+// SEO Operations Console — Phase 2 schema
+// Domain tables are separate from Better Auth tables (User/Session/Account/Verification).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Better Auth (isolated auth tables)
+// ---------------------------------------------------------------------------
+
+model User {
+  id            String    @id @default(cuid())
+  name          String
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  sessions      Session[]
+  accounts      Account[]
+
+  @@map("auth_user")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("auth_session")
+}
+
+model Account {
+  id                    String    @id @default(cuid())
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@map("auth_account")
+}
+
+model Verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("auth_verification")
+}
+
+// ---------------------------------------------------------------------------
+// SEO domain
+// ---------------------------------------------------------------------------
+
+enum ProjectStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum GscPropertyType {
+  DOMAIN
+  URL_PREFIX
+}
+
+enum GscPropertyStatus {
+  CONFIGURED
+  VERIFIED
+  ERROR
+  DISABLED
+}
+
+enum PageRole {
+  INDEXABLE
+  NOINDEX
+  UNKNOWN
+}
+
+enum PageSource {
+  SITEMAP
+  MANUAL
+  GSC
+}
+
+/// Distinguishes whole-property metrics from primary-origin-scoped metrics.
+enum GscMetricScopeType {
+  PROPERTY
+  ORIGIN
+}
+
+enum JobRunStatus {
+  RUNNING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+model Project {
+  id            String        @id @default(cuid())
+  slug          String        @unique
+  displayName   String
+  /// Primary SEO surface origin (e.g. https://www.simplerosterplus.com).
+  /// Not overloaded with "canonical" — that term belongs at URL/page level.
+  primaryOrigin String
+  /// Expected primary sitemap URL for the managed SEO surface (optional config).
+  sitemapUrl    String?
+  status        ProjectStatus @default(ACTIVE)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  gscProperties      GscProperty[]
+  pages              Page[]
+  gscDailyTotals     GscDailyTotal[]
+  gscPageDaily       GscPageDaily[]
+  gscQueryDaily      GscQueryDaily[]
+  gscQueryPageRollups GscQueryPageRollup[]
+  gscSitemapSnapshots GscSitemapSnapshot[]
+  gscUrlInspections  GscUrlInspection[]
+  jobRuns            JobRun[]
+
+  @@map("projects")
+}
+
+model GscProperty {
+  id             String            @id @default(cuid())
+  projectId      String
+  /// Exact GSC site URL, e.g. sc-domain:simplerosterplus.com
+  siteUrl        String
+  propertyType   GscPropertyType
+  isPrimary      Boolean           @default(true)
+  status         GscPropertyStatus @default(CONFIGURED)
+  lastVerifiedAt DateTime?
+  lastError      String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  project             Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  gscDailyTotals      GscDailyTotal[]
+  gscPageDaily        GscPageDaily[]
+  gscQueryDaily       GscQueryDaily[]
+  gscQueryPageRollups GscQueryPageRollup[]
+  gscSitemapSnapshots GscSitemapSnapshot[]
+  gscUrlInspections   GscUrlInspection[]
+
+  @@unique([projectId, siteUrl])
+  @@index([projectId])
+  @@map("gsc_properties")
+}
+
+model Page {
+  id        String     @id @default(cuid())
+  projectId String
+  url       String
+  host      String
+  path      String
+  role      PageRole   @default(UNKNOWN)
+  source    PageSource @default(MANUAL)
+  watched   Boolean    @default(false)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  project         Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  urlInspections  GscUrlInspection[]
+
+  @@unique([projectId, url])
+  @@index([projectId, host])
+  @@map("pages")
+}
+
+model GscDailyTotal {
+  id             String             @id @default(cuid())
+  projectId      String
+  gscPropertyId  String
+  date           DateTime           @db.Date
+  scopeType      GscMetricScopeType
+  /// PROPERTY → siteUrl; ORIGIN → origin URL (e.g. https://www.simplerosterplus.com).
+  /// Required (non-null) so uniqueness works under PostgreSQL NULL semantics.
+  scopeValue     String
+  clicks         Int
+  impressions    Int
+  ctr            Float
+  position       Float
+  /// True when the API response may have been truncated (Phase 3).
+  truncated      Boolean            @default(false)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  project     Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  gscProperty GscProperty @relation(fields: [gscPropertyId], references: [id], onDelete: Cascade)
+
+  @@unique([gscPropertyId, date, scopeType, scopeValue])
+  @@index([projectId, date])
+  @@map("gsc_daily_totals")
+}
+
+model GscPageDaily {
+  id            String   @id @default(cuid())
+  projectId     String
+  gscPropertyId String
+  date          DateTime @db.Date
+  pageUrl       String
+  host          String
+  clicks        Int
+  impressions   Int
+  ctr           Float
+  position      Float
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  project     Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  gscProperty GscProperty @relation(fields: [gscPropertyId], references: [id], onDelete: Cascade)
+
+  @@unique([gscPropertyId, date, pageUrl])
+  @@index([projectId, date])
+  @@index([projectId, host])
+  @@map("gsc_page_daily")
+}
+
+/// Query metrics. scopeType/scopeValue distinguish property-wide vs primary-origin rows.
+/// No schema-level row-count cap — Phase 3 applies API request ceilings and records truncation.
+model GscQueryDaily {
+  id            String             @id @default(cuid())
+  projectId     String
+  gscPropertyId String
+  date          DateTime           @db.Date
+  query         String
+  scopeType     GscMetricScopeType
+  /// PROPERTY → siteUrl; ORIGIN → primaryOrigin (or filtered origin). Required for unique rows.
+  scopeValue    String
+  clicks        Int
+  impressions   Int
+  ctr           Float
+  position      Float
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  project     Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  gscProperty GscProperty @relation(fields: [gscPropertyId], references: [id], onDelete: Cascade)
+
+  @@unique([gscPropertyId, date, query, scopeType, scopeValue])
+  @@index([projectId, date])
+  @@map("gsc_query_daily")
+}
+
+/// Replaceable rolling-period query×page snapshot (not daily history).
+model GscQueryPageRollup {
+  id            String             @id @default(cuid())
+  projectId     String
+  gscPropertyId String
+  periodStart   DateTime           @db.Date
+  periodEnd     DateTime           @db.Date
+  query         String
+  pageUrl       String
+  host          String
+  scopeType     GscMetricScopeType @default(ORIGIN)
+  /// Typically the project primaryOrigin for v0.1 rollups.
+  scopeValue    String
+  clicks        Int
+  impressions   Int
+  ctr           Float
+  position      Float
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  project     Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  gscProperty GscProperty @relation(fields: [gscPropertyId], references: [id], onDelete: Cascade)
+
+  @@unique([gscPropertyId, periodStart, periodEnd, query, pageUrl, scopeType, scopeValue])
+  @@index([projectId, periodEnd])
+  @@map("gsc_query_page_rollups")
+}
+
+model GscSitemapSnapshot {
+  id             String   @id @default(cuid())
+  projectId      String
+  gscPropertyId  String
+  sitemapPath    String
+  lastSubmitted  DateTime?
+  lastDownloaded DateTime?
+  isPending      Boolean  @default(false)
+  submittedCount Int?
+  warningCount   Int      @default(0)
+  errorCount     Int      @default(0)
+  /// Optional raw API payload for troubleshooting. Not the primary model.
+  /// Do not use deprecated `indexed` as an SEO metric.
+  rawResult      Json?
+  capturedAt     DateTime @default(now())
+
+  project     Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  gscProperty GscProperty @relation(fields: [gscPropertyId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, capturedAt])
+  @@index([gscPropertyId, sitemapPath])
+  @@map("gsc_sitemap_snapshots")
+}
+
+model GscUrlInspection {
+  id              String    @id @default(cuid())
+  projectId       String
+  gscPropertyId   String
+  pageId          String?
+  inspectedUrl    String
+  inspectedAt     DateTime
+  verdict         String?
+  coverageState   String?
+  indexingState   String?
+  robotsTxtState  String?
+  pageFetchState  String?
+  lastCrawlTime   DateTime?
+  googleCanonical String?
+  userCanonical   String?
+  crawledAs       String?
+  rawResult       Json?
+
+  project     Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  gscProperty GscProperty @relation(fields: [gscPropertyId], references: [id], onDelete: Cascade)
+  page        Page?       @relation(fields: [pageId], references: [id], onDelete: SetNull)
+
+  @@index([projectId, inspectedAt])
+  @@index([pageId])
+  @@map("gsc_url_inspections")
+}
+
+/// Generic job run log for the worker process. Not a queue framework.
+model JobRun {
+  id         String       @id @default(cuid())
+  jobName    String
+  projectId  String?
+  startedAt  DateTime     @default(now())
+  finishedAt DateTime?
+  status     JobRunStatus @default(RUNNING)
+  error      String?
+  stats      Json?
+
+  project Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([jobName, startedAt])
+  @@index([projectId])
+  @@map("job_runs")
+}

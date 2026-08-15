@@ -1,0 +1,36 @@
+# Local secrets — never commit
+.secrets/
+.env
+.env.*
+!.env.example
+
+# Credentials / keys
+**/gsc-sa.json
+**/*-sa.json
+**/credentials*.json
+**/seo-ops-console-*.json
+**/*.pem
+**/*service-account*.json
+
+# Dependencies & build
+node_modules/
+dist/
+apps/*/dist/
+*.tsbuildinfo
+
+# Tooling / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.log
+coverage/
+.turbo/
+
+# Spike disposable outputs (source scripts may stay; out/ & deps stay ignored)
+spike-gsc/node_modules/
+spike-gsc/out/
+
+# Prisma
+prisma/*.db
+prisma/*.db-journal

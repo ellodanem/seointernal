@@ -1,0 +1,76 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: seo
+      POSTGRES_PASSWORD: seo
+      POSTGRES_DB: seo_ops
+    ports:
+      - "5433:5432"
+    volumes:
+      - seo_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U seo -d seo_ops"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  web:
+    build: .
+    command: ["web"]
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      DATABASE_URL: postgresql://seo:seo@postgres:5432/seo_ops?schema=public
+      APP_BASE_URL: http://localhost:3000
+      BETTER_AUTH_URL: http://localhost:3000
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-phase2-local-dev-secret-change-me-32chars}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      OWNER_EMAILS: ${OWNER_EMAILS:-owner@example.com}
+      WEB_ORIGIN: http://localhost:3000
+      GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Optional: mount GSC SA key at runtime (Phase 3). Never bake into image.
+    # volumes:
+    #   - ${GSC_SA_HOST_PATH}:/run/secrets/gsc-sa.json:ro
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  worker:
+    build: .
+    command: ["worker"]
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://seo:seo@postgres:5432/seo_ops?schema=public
+      APP_BASE_URL: http://localhost:3000
+      BETTER_AUTH_URL: http://localhost:3000
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-phase2-local-dev-secret-change-me-32chars}
+      OWNER_EMAILS: ${OWNER_EMAILS:-owner@example.com}
+      WEB_ORIGIN: http://localhost:3000
+      GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-}
+      WORKER_IDLE_MS: ${WORKER_IDLE_MS:-60000}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+
+volumes:
+  seo_pg_data:

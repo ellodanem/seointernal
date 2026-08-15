@@ -1,0 +1,14 @@
+{
+  "name": "seo-console-gsc-spike",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Disposable Phase 1 Google Search Console access spike. Delete after Phase 2.",
+  "type": "module",
+  "scripts": {
+    "spike": "node run.mjs",
+    "errors": "node run.mjs --errors-only"
+  },
+  "dependencies": {
+    "googleapis": "^148.0.0"
+  }
+}
