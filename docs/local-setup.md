@@ -5,6 +5,7 @@
 - Node.js 20+
 - Docker (for Postgres and/or full stack)
 - Google Cloud OAuth client (for owner login)
+- GSC service-account JSON outside the repo (for Phase 3 ingest)
 
 ## Environment
 
@@ -24,11 +25,16 @@ Required for a usable login:
 | `OWNER_EMAILS` | Comma-separated allowlisted owner emails |
 | `WEB_ORIGIN` | Vite origin in dev (`http://localhost:5173`) |
 
-Optional Phase 2 / Phase 3:
+Phase 3 ingest:
 
 | Variable | Purpose |
 |----------|---------|
-| `GOOGLE_APPLICATION_CREDENTIALS` | Path to GSC service-account JSON (not required to boot) |
+| `GOOGLE_APPLICATION_CREDENTIALS` | Absolute path to GSC SA JSON (required for ingest; optional for web boot) |
+| `GSC_INGEST_INTERVAL_MS` | Worker ingest cadence (default 6h) |
+| `GSC_INGEST_ON_START` | `true`/`false` — ingest shortly after worker boot |
+| `GSC_ROW_LIMIT` | Search Analytics request ceiling (default 5000) |
+| `GSC_MAX_DAYS_PER_RUN` | Max finalized days per run (default 28) |
+| `GSC_INITIAL_BACKFILL_DAYS` | Catch-up window ending at latest finalized date (default 28) |
 | `LOG_LEVEL` | `debug` \| `info` \| `warn` \| `error` |
 | `WORKER_IDLE_MS` | Worker heartbeat interval |
 
@@ -40,21 +46,19 @@ Optional Phase 2 / Phase 3:
 4. Put client ID/secret in `.env`
 5. Set `OWNER_EMAILS` to your Google account email
 
-Unauthorized Google accounts are rejected at user/session creation (no access).
-
-### GSC service account (Phase 3)
+### GSC service account
 
 Do **not** copy the key into the repo. Point `GOOGLE_APPLICATION_CREDENTIALS` at an external path, e.g.:
 
 - Windows: `C:\Users\Dane\.seo-console\gsc-sa.json`
-- Docker: mount to `/run/secrets/gsc-sa.json` and set the env var to that path
+- Docker: mount via `docker-compose.gsc.yml` to `/run/secrets/gsc-sa.json`
 
 ## Database
 
 ```bash
 docker compose up -d postgres
 npm install
-npx prisma migrate dev --name init
+npx prisma migrate deploy
 npm run db:seed
 ```
 
@@ -63,28 +67,54 @@ npm run db:seed
 ```bash
 npm run dev:server   # :3000
 npm run dev:web      # :5173 proxies /api → :3000
-npm run dev:worker   # idle worker
+npm run dev:worker   # scheduled GSC ingest + heartbeat
 ```
 
-Or full Docker stack:
+### Manual ingest / backfill
+
+```bash
+npm run gsc:ingest
+npm run gsc:ingest -- --only-dates 2026-08-13
+npm run gsc:ingest -- --backfill-days 28 --max-days 28
+npm run gsc:proof    # filtered-query decision gate
+npm run gsc:smoke    # live one-day + idempotency smoke
+```
+
+Docker (after images are built; requires `docker-compose.gsc.yml` mount):
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.gsc.yml run --rm worker ingest -- --project simple-roster-plus --max-days 1
+```
+
+Or full Docker stack **without** GSC key:
 
 ```bash
 docker compose up --build
 ```
 
-Open http://localhost:3000 — sign in, then **Seed Simple Roster Plus**.
+With GSC key mounted (host path required):
+
+```bash
+# PowerShell
+$env:GSC_SA_HOST_PATH = "C:\Users\Dane\.seo-console\gsc-sa.json"
+docker compose -f docker-compose.yml -f docker-compose.gsc.yml up --build
+```
+
+Open http://localhost:3000 — sign in, then **Seed Simple Roster Plus** if needed. Project detail shows ingest status (not a dashboard).
+
+## Verification
+
+```bash
+npm run typecheck
+npm run build
+npm run verify:phase2
+npm run verify:phase3   # unit + DB integration
+npm run gsc:smoke       # optional live GSC
+```
 
 ## Auth verification without automating Google
 
-Automated CI cannot complete a real Google consent screen safely here. Manual checklist:
-
 1. Allowlisted email can sign in and open `/` (Projects).
-2. Non-allowlisted Google account is rejected (forbidden / no session).
+2. Non-allowlisted Google account is rejected.
 3. Signed-out requests to `/api/projects` return 401.
 4. `/api/health` works without a session.
-
-## Migrations
-
-- Dev: `npx prisma migrate dev`
-- Deploy / Docker entrypoint: `npx prisma migrate deploy`
-- Seed: `npm run db:seed` or UI button / `docker compose run --rm web seed`

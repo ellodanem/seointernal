@@ -1,0 +1,28 @@
+# Optional Compose override for mounting the GSC service-account key.
+# Never commit real credential paths as mandatory production config.
+#
+# Usage (PowerShell example):
+#   $env:GSC_SA_HOST_PATH = "C:\Users\Dane\.seo-console\gsc-sa.json"
+#   docker compose -f docker-compose.yml -f docker-compose.gsc.yml up --build
+#
+# Inside containers the key is always at /run/secrets/gsc-sa.json (read-only).
+
+services:
+  web:
+    environment:
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/gsc-sa.json
+    volumes:
+      - type: bind
+        source: ${GSC_SA_HOST_PATH}
+        target: /run/secrets/gsc-sa.json
+        read_only: true
+
+  worker:
+    environment:
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/gsc-sa.json
+      GSC_INGEST_ON_START: ${GSC_INGEST_ON_START:-true}
+    volumes:
+      - type: bind
+        source: ${GSC_SA_HOST_PATH}
+        target: /run/secrets/gsc-sa.json
+        read_only: true

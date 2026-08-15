@@ -2,7 +2,7 @@
 
 Internal multi-project SEO operations console. **Not** part of Simple Roster Plus.
 
-Phase 2 delivers the application foundation only: auth, schema, Docker shape, and a minimal UI shell. Search Console ingestion starts in Phase 3.
+Phase 3 delivers production **read-only Google Search Console ingestion** on top of the Phase 2 foundation. The owner dashboard is Phase 4.
 
 ## Stack
 
@@ -12,7 +12,8 @@ Phase 2 delivers the application foundation only: auth, schema, Docker shape, an
 | Frontend | Vite + React + TypeScript |
 | Database | PostgreSQL + Prisma |
 | Auth | Better Auth (Google) + owner email allowlist |
-| Process shape | `web` + `worker` (same image) |
+| GSC | Service account + `googleapis` (read-only) |
+| Process shape | `web` + `worker` (same image) + CLI ingest |
 | Deploy | Docker Compose–first, host-portable |
 
 ## Quick start (Docker)
@@ -24,35 +25,45 @@ cp .env.example .env
 docker compose up --build
 ```
 
-- App: http://localhost:3000
-- Postgres: localhost:5433 (`seo` / `seo` / `seo_ops`) — host port **5433** avoids clashing with other local Postgres containers on 5432
-
-Seed Project #1 after sign-in via **Seed Simple Roster Plus**, or:
+With GSC credentials mounted (never baked into the image):
 
 ```bash
-docker compose run --rm web seed
+# PowerShell
+$env:GSC_SA_HOST_PATH = "C:\Users\Dane\.seo-console\gsc-sa.json"
+docker compose -f docker-compose.yml -f docker-compose.gsc.yml up --build
 ```
+
+- App: http://localhost:3000
+- Postgres: localhost:5433 (`seo` / `seo` / `seo_ops`)
 
 ## Quick start (local Node + Docker Postgres)
 
 ```bash
 cp .env.example .env
+# Set GOOGLE_APPLICATION_CREDENTIALS to your SA JSON path
 docker compose up -d postgres
 npm install
-npx prisma migrate dev
+npx prisma migrate deploy
 npm run db:seed
 npm run dev:server   # terminal 1 — http://localhost:3000
 npm run dev:web      # terminal 2 — http://localhost:5173 (proxies /api)
-npm run dev:worker   # terminal 3 — idle worker
+npm run dev:worker   # terminal 3 — scheduled GSC ingest
+```
+
+Manual ingest / proof:
+
+```bash
+npm run gsc:proof
+npm run gsc:ingest -- --backfill-days 28 --max-days 28
+npm run gsc:smoke
 ```
 
 ## Documentation
 
-- [Architecture](docs/architecture.md)
-- [Local setup & auth](docs/local-setup.md)
-- [Phase 2 scope & Phase 3 handoff](docs/phase-3-handoff.md)
+- [Architecture](docs/architecture.md) (Phase 3)
+- [Local setup](docs/local-setup.md)
+- [Phase 4 handoff](docs/phase-4-handoff.md)
 - Phase 1 evidence: `phase1-gsc-spike-report.md`
-- SRP audit: `srp-seo-implementation-audit.md`
 
 ## Project #1 (seed)
 
@@ -68,8 +79,9 @@ npm run dev:worker   # terminal 3 — idle worker
 
 - Never commit `.env` or service-account JSON.
 - GSC credentials live outside the repo (`GOOGLE_APPLICATION_CREDENTIALS`).
-- App boots without GSC credentials; Phase 2 does not call Search Console.
+- App boots without GSC credentials; ingestion reports unavailable configuration.
+- OAuth callback query strings are redacted from HTTP logs.
 
 ## Default branch
 
-Local default branch is **`main`** (renamed from `master` before any remote exists).
+Local default branch is **`main`**. There is currently **no git remote**.

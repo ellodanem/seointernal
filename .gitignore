@@ -31,6 +31,12 @@ coverage/
 spike-gsc/node_modules/
 spike-gsc/out/
 
+# Phase 3 proof / smoke outputs
+scripts/out/
+
+# Docker Compose placeholder for optional GSC mount (not a real secret)
+.docker/
+
 # Prisma
 prisma/*.db
 prisma/*.db-journal

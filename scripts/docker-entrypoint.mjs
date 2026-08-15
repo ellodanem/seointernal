@@ -29,8 +29,12 @@ async function main() {
   } else if (role === "seed") {
     console.log("Seeding database...");
     await run("npx", ["tsx", "prisma/seed.ts"]);
+  } else if (role === "ingest") {
+    console.log("Running GSC ingest...");
+    const extra = process.argv.slice(3);
+    await run("node", ["apps/server/dist/cli-gsc-ingest.js", ...extra]);
   } else {
-    throw new Error(`Unknown role: ${role} (expected web|worker|seed)`);
+    throw new Error(`Unknown role: ${role} (expected web|worker|seed|ingest)`);
   }
 }
 

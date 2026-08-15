@@ -1,19 +1,23 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { apiGet } from "../lib/api";
-import type { Project } from "../lib/types";
+import type { IngestStatus, Project } from "../lib/types";
 
 export function ProjectDetailPage() {
   const { slug } = useParams();
   const [project, setProject] = useState<Project | null>(null);
+  const [ingestStatus, setIngestStatus] = useState<IngestStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!slug) return;
     setLoading(true);
-    apiGet<{ project: Project }>(`/api/projects/${slug}`)
-      .then((data) => setProject(data.project))
+    apiGet<{ project: Project; ingestStatus: IngestStatus }>(`/api/projects/${slug}`)
+      .then((data) => {
+        setProject(data.project);
+        setIngestStatus(data.ingestStatus);
+      })
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load"))
       .finally(() => setLoading(false));
   }, [slug]);
@@ -30,6 +34,8 @@ export function ProjectDetailPage() {
   if (!project) return null;
 
   const primary = project.gscProperties.find((p) => p.isPrimary) ?? project.gscProperties[0];
+  const job = ingestStatus?.lastJob;
+  const counts = ingestStatus?.counts;
 
   return (
     <>
@@ -39,7 +45,7 @@ export function ProjectDetailPage() {
             <Link to="/">Projects</Link> / {project.slug}
           </p>
           <h1>{project.displayName}</h1>
-          <p>Project configuration only — no SEO metrics in Phase 2.</p>
+          <p>Operational project + GSC ingest status (Phase 3). No SEO dashboard yet.</p>
         </div>
         <span className="badge badge-ok">{project.status}</span>
       </div>
@@ -85,9 +91,19 @@ export function ProjectDetailPage() {
               </div>
             </div>
             <div className="meta-item">
-              <label>Primary</label>
-              <div>{primary.isPrimary ? "Yes" : "No"}</div>
+              <label>Last verified</label>
+              <div className="mono">
+                {primary.lastVerifiedAt
+                  ? new Date(primary.lastVerifiedAt).toLocaleString()
+                  : "—"}
+              </div>
             </div>
+            {primary.lastError ? (
+              <div className="meta-item" style={{ gridColumn: "1 / -1" }}>
+                <label>Last error</label>
+                <div className="error">{primary.lastError}</div>
+              </div>
+            ) : null}
           </div>
         ) : (
           <p className="muted">No GSC property configured.</p>
@@ -95,19 +111,69 @@ export function ProjectDetailPage() {
       </div>
 
       <div className="panel">
-        <h2>Integration status</h2>
-        <div className="stack">
-          <div>
-            <span className="badge badge-warn">Placeholder</span>
-            <span className="muted" style={{ marginLeft: "0.75rem" }}>
-              GSC ingestion is deferred to Phase 3. Credential path is optional for boot.
-            </span>
+        <h2>Ingest status</h2>
+        <div className="meta-grid">
+          <div className="meta-item">
+            <label>Search data through</label>
+            <div className="mono">{ingestStatus?.latestFinalizedDate ?? "—"}</div>
           </div>
-          <p className="muted" style={{ margin: 0 }}>
-            Phase 1 verified access to <code>sc-domain:simplerosterplus.com</code> with finalized data
-            through 2026-08-13 (~2-day lag). Production daily ingest is not enabled yet.
-          </p>
+          <div className="meta-item">
+            <label>Last successful ingest</label>
+            <div className="mono">
+              {ingestStatus?.lastSuccessAt
+                ? new Date(ingestStatus.lastSuccessAt).toLocaleString()
+                : "—"}
+            </div>
+          </div>
+          <div className="meta-item">
+            <label>Last job status</label>
+            <div>
+              {job ? <span className="badge">{job.status}</span> : <span className="muted">—</span>}
+            </div>
+          </div>
+          <div className="meta-item">
+            <label>Last job finished</label>
+            <div className="mono">
+              {job?.finishedAt ? new Date(job.finishedAt).toLocaleString() : "—"}
+            </div>
+          </div>
         </div>
+        {job?.error ? (
+          <p className="error" style={{ marginTop: "1rem" }}>
+            {job.error}
+          </p>
+        ) : null}
+        {counts ? (
+          <div className="meta-grid" style={{ marginTop: "1.25rem" }}>
+            <div className="meta-item">
+              <label>PROPERTY total days</label>
+              <div>{counts.propertyDays}</div>
+            </div>
+            <div className="meta-item">
+              <label>ORIGIN total days</label>
+              <div>{counts.originDays}</div>
+            </div>
+            <div className="meta-item">
+              <label>Page daily rows</label>
+              <div>{counts.pageRows}</div>
+            </div>
+            <div className="meta-item">
+              <label>Query daily rows (ORIGIN)</label>
+              <div>{counts.queryRows}</div>
+            </div>
+            <div className="meta-item">
+              <label>Query×page rollup rows</label>
+              <div>{counts.queryPageRows}</div>
+            </div>
+            <div className="meta-item">
+              <label>Sitemap snapshots</label>
+              <div>{counts.sitemapSnapshots}</div>
+            </div>
+          </div>
+        ) : null}
+        <p className="muted" style={{ marginTop: "1rem", marginBottom: 0 }}>
+          Manual ingest: <code>npm run gsc:ingest</code>. Charts and recommendations are Phase 4+.
+        </p>
       </div>
     </>
   );

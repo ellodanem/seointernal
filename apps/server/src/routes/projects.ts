@@ -44,7 +44,79 @@ projectRoutes.get("/:slug", async (c) => {
     },
   });
   if (!project) return c.json({ error: "Project not found" }, 404);
-  return c.json({ project });
+
+  const primary = project.gscProperties.find((p) => p.isPrimary) ?? project.gscProperties[0];
+
+  const [latestTotal, lastJob, lastSuccess, counts] = await Promise.all([
+    primary
+      ? prisma.gscDailyTotal.findFirst({
+          where: {
+            gscPropertyId: primary.id,
+            scopeType: "PROPERTY",
+          },
+          orderBy: { date: "desc" },
+          select: { date: true },
+        })
+      : Promise.resolve(null),
+    prisma.jobRun.findFirst({
+      where: {
+        jobName: "gsc_ingest_daily",
+        OR: [{ projectId: project.id }, { projectId: null }],
+      },
+      orderBy: { startedAt: "desc" },
+    }),
+    prisma.jobRun.findFirst({
+      where: {
+        jobName: "gsc_ingest_daily",
+        status: "SUCCEEDED",
+        OR: [{ projectId: project.id }, { projectId: null }],
+      },
+      orderBy: { finishedAt: "desc" },
+    }),
+    primary
+      ? Promise.all([
+          prisma.gscDailyTotal.count({
+            where: { gscPropertyId: primary.id, scopeType: "PROPERTY" },
+          }),
+          prisma.gscDailyTotal.count({
+            where: { gscPropertyId: primary.id, scopeType: "ORIGIN" },
+          }),
+          prisma.gscPageDaily.count({ where: { gscPropertyId: primary.id } }),
+          prisma.gscQueryDaily.count({ where: { gscPropertyId: primary.id } }),
+          prisma.gscQueryPageRollup.count({ where: { gscPropertyId: primary.id } }),
+          prisma.gscSitemapSnapshot.count({ where: { gscPropertyId: primary.id } }),
+        ])
+      : Promise.resolve([0, 0, 0, 0, 0, 0] as const),
+  ]);
+
+  const [propertyDays, originDays, pageRows, queryRows, queryPageRows, sitemapSnapshots] =
+    counts as number[];
+
+  return c.json({
+    project,
+    ingestStatus: {
+      latestFinalizedDate: latestTotal?.date?.toISOString().slice(0, 10) ?? null,
+      lastJob: lastJob
+        ? {
+            id: lastJob.id,
+            status: lastJob.status,
+            startedAt: lastJob.startedAt,
+            finishedAt: lastJob.finishedAt,
+            error: lastJob.error,
+            stats: lastJob.stats,
+          }
+        : null,
+      lastSuccessAt: lastSuccess?.finishedAt ?? null,
+      counts: {
+        propertyDays,
+        originDays,
+        pageRows,
+        queryRows,
+        queryPageRows,
+        sitemapSnapshots,
+      },
+    },
+  });
 });
 
 projectRoutes.post("/", async (c) => {

@@ -21,6 +21,20 @@ const envSchema = z.object({
   WEB_ORIGIN: z.string().default("http://localhost:5173"),
   GOOGLE_APPLICATION_CREDENTIALS: z.string().optional().default(""),
   WORKER_IDLE_MS: z.coerce.number().int().positive().default(60_000),
+  /** How often the worker may attempt GSC ingest (default 6h). */
+  GSC_INGEST_INTERVAL_MS: z.coerce.number().int().positive().default(6 * 60 * 60 * 1000),
+  /** Run one ingest attempt shortly after worker boot. */
+  GSC_INGEST_ON_START: z
+    .string()
+    .optional()
+    .default("true")
+    .transform((v) => v !== "false" && v !== "0"),
+  /** Operational Search Analytics row ceiling per request. */
+  GSC_ROW_LIMIT: z.coerce.number().int().positive().default(5000),
+  /** Max finalized days processed in a single ingest run. */
+  GSC_MAX_DAYS_PER_RUN: z.coerce.number().int().positive().default(28),
+  /** First-run / catch-up window ending at latest finalized date. */
+  GSC_INITIAL_BACKFILL_DAYS: z.coerce.number().int().positive().default(28),
   PORT: z.coerce.number().int().positive().default(3000),
 });
 

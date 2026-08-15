@@ -36,9 +36,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    # Optional: mount GSC SA key at runtime (Phase 3). Never bake into image.
-    # volumes:
-    #   - ${GSC_SA_HOST_PATH}:/run/secrets/gsc-sa.json:ro
+    # GSC SA key: use docker-compose.gsc.yml override (never bake into image).
     healthcheck:
       test:
         [
@@ -65,6 +63,11 @@ services:
       WEB_ORIGIN: http://localhost:3000
       GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-}
       WORKER_IDLE_MS: ${WORKER_IDLE_MS:-60000}
+      GSC_INGEST_INTERVAL_MS: ${GSC_INGEST_INTERVAL_MS:-21600000}
+      GSC_INGEST_ON_START: ${GSC_INGEST_ON_START:-true}
+      GSC_ROW_LIMIT: ${GSC_ROW_LIMIT:-5000}
+      GSC_MAX_DAYS_PER_RUN: ${GSC_MAX_DAYS_PER_RUN:-28}
+      GSC_INITIAL_BACKFILL_DAYS: ${GSC_INITIAL_BACKFILL_DAYS:-28}
       LOG_LEVEL: ${LOG_LEVEL:-info}
     depends_on:
       postgres:

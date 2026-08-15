@@ -1,8 +1,8 @@
 {
   "name": "seo-ops-console",
   "private": true,
-  "version": "0.2.0",
-  "description": "Internal SEO Operations Console — Phase 2 foundation",
+  "version": "0.3.0",
+  "description": "Internal SEO Operations Console — Phase 3 GSC ingestion",
   "workspaces": [
     "apps/*"
   ],
@@ -20,7 +20,12 @@
     "db:migrate:dev": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
-    "verify:phase2": "tsx --env-file=.env scripts/verify-phase2.ts"
+    "verify:phase2": "tsx --env-file=.env scripts/verify-phase2.ts",
+    "verify:phase3": "npm run test:gsc && tsx --env-file=.env scripts/verify-phase3-db.ts",
+    "test:gsc": "tsx --test apps/server/src/gsc/gsc.test.ts",
+    "gsc:ingest": "tsx --env-file=.env scripts/run-gsc-ingest.ts",
+    "gsc:proof": "tsx --env-file=.env scripts/proof-origin-filtered-queries.ts",
+    "gsc:smoke": "tsx --env-file=.env scripts/smoke-gsc-ingest.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.14.0",

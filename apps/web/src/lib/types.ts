@@ -20,6 +20,27 @@ export type Project = {
   gscProperties: GscProperty[];
 };
 
+export type IngestStatus = {
+  latestFinalizedDate: string | null;
+  lastJob: {
+    id: string;
+    status: string;
+    startedAt: string;
+    finishedAt: string | null;
+    error: string | null;
+    stats: unknown;
+  } | null;
+  lastSuccessAt: string | null;
+  counts: {
+    propertyDays: number;
+    originDays: number;
+    pageRows: number;
+    queryRows: number;
+    queryPageRows: number;
+    sitemapSnapshots: number;
+  };
+};
+
 export type MeResponse = {
   user: {
     id: string;
