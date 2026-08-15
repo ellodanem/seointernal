@@ -1,16 +1,16 @@
-# Architecture (Phase 3)
+# Architecture (Phase 4)
 
 ## Purpose
 
 Portable internal SEO Operations Console. Multi-**project** data model (not multi-tenant SaaS). One owner, Google allowlist, no public registration.
 
-Simple Roster Plus is Project #1. Phase 3 adds production-quality **read-only** Google Search Console ingestion.
+Simple Roster Plus is Project #1. Phase 3 stores trusted GSC history. Phase 4 adds an **understandable owner dashboard** that reads that history (ORIGIN-scoped headlines).
 
 ## Process shape
 
 | Process | Entry | Responsibility |
 |---------|-------|----------------|
-| **web** | `apps/server/dist/index.js` | Hono HTTP API, Better Auth, static UI |
+| **web** | `apps/server/dist/index.js` | Hono HTTP API, Better Auth, static UI, dashboard reads |
 | **worker** | `apps/server/dist/worker.js` | Scheduled `gsc_ingest_daily` + DB heartbeat |
 | **CLI** | `npm run gsc:ingest` | Manual / backfill trigger (not a public HTTP endpoint) |
 
@@ -27,20 +27,23 @@ No Redis, BullMQ, or external queues. Concurrency uses PostgreSQL advisory locks
 
 | Dataset | Scope | Notes |
 |---------|-------|-------|
-| Daily totals | PROPERTY + ORIGIN | Both persisted |
-| Page daily | Domain property (all hosts) | Includes `app.` historically — facts only |
+| Daily totals | PROPERTY + ORIGIN | Both persisted; **dashboard headlines use ORIGIN** |
+| Page daily | Domain property (all hosts) | Top pages filter to primary origin; Other hosts uses the rest |
 | Query daily | **ORIGIN only** | Page `contains` filter on primary origin |
 | Query × page | ORIGIN rolling 28-day snapshot | Replace on refresh; not daily pair history |
 | Sitemaps | Append-only snapshots | Ignore deprecated `indexed` |
 
 Proven (Phase 3 filtered-query gate): Search Analytics `dimensionFilterGroups` with `dimension=page`, `operator=contains`, `expression=<primaryOrigin>` excludes app-host pages and query×page pairs.
 
+Dashboard details: **`docs/dashboard.md`**.
+
 ## Finalized-data semantics
 
 - Persist only `dataState=final`.
 - Latest finalized date is discovered from the API (date dimension probe), not assumed as `today - 2`.
 - Incomplete `dataState=all` rows are never written to durable daily tables.
-- Dashboard-ready phrase: “Search data through \<latest PROPERTY total date\>”.
+- Dashboard phrase: “Search data through \<latest ORIGIN total date\>”.
+- Reporting windows always end on that stored finalized date.
 
 ## Ingestion flow (`gsc_ingest_daily`)
 
@@ -88,16 +91,18 @@ For each active project / primary GSC property:
 
 ## Schema overview
 
-Unchanged Phase 2 tables; Phase 3 uses them as designed:
+Unchanged Phase 2/3 tables; Phase 4 is read-only over:
 
 `projects`, `gsc_properties`, `pages`, `gsc_daily_totals`, `gsc_page_daily`, `gsc_query_daily`, `gsc_query_page_rollups`, `gsc_sitemap_snapshots`, `job_runs`
 
 ## Repo layout
 
 ```
-apps/server/src/gsc/     GSC client (auth, filters, dates, mapping, errors)
-apps/server/src/jobs/    gsc_ingest_daily + advisory locks
-scripts/                 proof, ingest CLI, smoke, DB verify
-docs/                    architecture / setup / handoffs
-spike-gsc/               Phase 1 evidence only
+apps/server/src/gsc/         GSC client (auth, filters, dates, mapping, errors)
+apps/server/src/jobs/        gsc_ingest_daily + advisory locks
+apps/server/src/dashboard/   period/compare/visibility + dashboard service
+apps/web/src/pages/          owner dashboard UI
+scripts/                     proof, ingest CLI, smoke, DB / dashboard verify
+docs/                        architecture / setup / handoffs / dashboard
+spike-gsc/                   Phase 1 evidence only
 ```

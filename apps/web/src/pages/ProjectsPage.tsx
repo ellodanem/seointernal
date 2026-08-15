@@ -44,7 +44,7 @@ export function ProjectsPage() {
       <div className="page-header">
         <div>
           <h1>Projects</h1>
-          <p>SEO projects managed by this console. Metrics ingestion arrives in Phase 3.</p>
+          <p>SEO projects managed by this console.</p>
         </div>
         <button className="btn" type="button" disabled={seeding} onClick={() => void seedSrp()}>
           {seeding ? "Seeding…" : "Seed Simple Roster Plus"}

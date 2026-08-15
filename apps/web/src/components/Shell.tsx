@@ -12,7 +12,7 @@ export function Shell({ userEmail, children }: ShellProps) {
       <aside className="sidebar">
         <div className="brand">
           <div className="brand-name">SEO Operations</div>
-          <div className="brand-meta">Internal console · Phase 2</div>
+          <div className="brand-meta">Internal console · Phase 4</div>
         </div>
         <nav className="nav">
           <NavLink to="/" end>

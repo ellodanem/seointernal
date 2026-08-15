@@ -100,7 +100,9 @@ $env:GSC_SA_HOST_PATH = "C:\Users\Dane\.seo-console\gsc-sa.json"
 docker compose -f docker-compose.yml -f docker-compose.gsc.yml up --build
 ```
 
-Open http://localhost:3000 — sign in, then **Seed Simple Roster Plus** if needed. Project detail shows ingest status (not a dashboard).
+Open http://localhost:3000 — sign in, then **Seed Simple Roster Plus** if needed. Open a project to view the Phase 4 owner dashboard.
+
+Dashboard semantics: **`docs/dashboard.md`**.
 
 ## Verification
 
@@ -109,12 +111,13 @@ npm run typecheck
 npm run build
 npm run verify:phase2
 npm run verify:phase3   # unit + DB integration
+npm run verify:phase4   # dashboard unit + real-data reconciliation
 npm run gsc:smoke       # optional live GSC
 ```
 
 ## Auth verification without automating Google
 
-1. Allowlisted email can sign in and open `/` (Projects).
+1. Allowlisted email can sign in and open `/` (Projects) and `/projects/simple-roster-plus`.
 2. Non-allowlisted Google account is rejected.
-3. Signed-out requests to `/api/projects` return 401.
+3. Signed-out requests to `/api/projects` and `/api/projects/:slug/dashboard` return 401.
 4. `/api/health` works without a session.

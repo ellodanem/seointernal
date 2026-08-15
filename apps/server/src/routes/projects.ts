@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { GscPropertyType, ProjectStatus } from "@prisma/client";
+import { getProjectDashboard, isDashboardPeriodDays } from "../dashboard/index.js";
 import { prisma } from "../lib/db.js";
 import { requireOwner, type AppVariables } from "../middleware/require-owner.js";
 
@@ -31,6 +32,19 @@ projectRoutes.get("/", async (c) => {
     },
   });
   return c.json({ projects });
+});
+
+projectRoutes.get("/:slug/dashboard", async (c) => {
+  const slug = c.req.param("slug");
+  const periodRaw = c.req.query("period");
+  const periodDays = periodRaw ? Number(periodRaw) : undefined;
+  if (periodDays != null && (!Number.isFinite(periodDays) || !isDashboardPeriodDays(periodDays))) {
+    return c.json({ error: "Invalid period. Use 7, 28, or 90." }, 400);
+  }
+
+  const dashboard = await getProjectDashboard({ slug, periodDays });
+  if (!dashboard) return c.json({ error: "Project not found" }, 404);
+  return c.json({ dashboard });
 });
 
 projectRoutes.get("/:slug", async (c) => {
