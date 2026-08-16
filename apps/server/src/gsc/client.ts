@@ -1,9 +1,10 @@
-import { google, type webmasters_v3 } from "googleapis";
+import { google, type searchconsole_v1, type webmasters_v3 } from "googleapis";
 import { assertCredentialsFile, mapGscError } from "./errors.js";
 import { GSC_READONLY_SCOPE, type GscDataState } from "./types.js";
 import { buildOriginPageFilter } from "./filters.js";
 import { mapAnalyticsRow, mapAggregateMetrics, mapSitemapEntry } from "./map.js";
 import type { GscAnalyticsRow, GscMetrics, GscSitemapEntry } from "./types.js";
+import type { GscUrlInspectionResult, InspectUrlInput } from "./inspection-types.js";
 import { addDaysYmd, toYmd, utcTodayYmd } from "./dates.js";
 
 export type GscClient = {
@@ -42,6 +43,8 @@ export type GscClient = {
     originFilter?: string | null;
   }) => Promise<{ rows: GscAnalyticsRow[]; truncated: boolean }>;
   listSitemaps: (siteUrl: string) => Promise<GscSitemapEntry[]>;
+  /** URL Inspection API (Search Console v1). One URL per call. */
+  inspectUrl: (opts: InspectUrlInput) => Promise<GscUrlInspectionResult>;
 };
 
 export type CreateGscClientOptions = {
@@ -67,14 +70,22 @@ export async function createGscClient(opts: CreateGscClientOptions): Promise<Gsc
       version: "v3",
       auth: authClient as never,
     });
+    const searchconsole = google.searchconsole({
+      version: "v1",
+      auth: authClient as never,
+    });
 
-    return buildClient(webmasters, rowLimitDefault);
+    return buildClient(webmasters, searchconsole, rowLimitDefault);
   } catch (err) {
     throw mapGscError(err);
   }
 }
 
-function buildClient(webmasters: webmasters_v3.Webmasters, rowLimitDefault: number): GscClient {
+function buildClient(
+  webmasters: webmasters_v3.Webmasters,
+  searchconsole: searchconsole_v1.Searchconsole,
+  rowLimitDefault: number,
+): GscClient {
   async function searchAnalyticsQuery(
     siteUrl: string,
     body: Record<string, unknown>,
@@ -189,6 +200,60 @@ function buildClient(webmasters: webmasters_v3.Webmasters, rowLimitDefault: numb
       } catch (err) {
         throw mapGscError(err);
       }
+    },
+
+    async inspectUrl(opts: InspectUrlInput) {
+      try {
+        const res = await searchconsole.urlInspection.index.inspect({
+          requestBody: {
+            inspectionUrl: opts.inspectionUrl,
+            siteUrl: opts.siteUrl,
+            languageCode: opts.languageCode ?? "en-US",
+          },
+        });
+        return mapInspectionResult(opts.inspectionUrl, res.data);
+      } catch (err) {
+        throw mapGscError(err);
+      }
+    },
+  };
+}
+
+function mapInspectionResult(
+  inspectedUrl: string,
+  data: searchconsole_v1.Schema$InspectUrlIndexResponse,
+): GscUrlInspectionResult {
+  const result = data.inspectionResult ?? {};
+  const indexStatus = result.indexStatusResult ?? {};
+  const referringUrls = Array.isArray(indexStatus.referringUrls)
+    ? indexStatus.referringUrls.filter((u): u is string => typeof u === "string").slice(0, 20)
+    : [];
+
+  return {
+    inspectedUrl,
+    inspectionResultLink: result.inspectionResultLink ?? null,
+    verdict: indexStatus.verdict ?? null,
+    coverageState: indexStatus.coverageState ?? null,
+    indexingState: indexStatus.indexingState ?? null,
+    robotsTxtState: indexStatus.robotsTxtState ?? null,
+    pageFetchState: indexStatus.pageFetchState ?? null,
+    lastCrawlTime: indexStatus.lastCrawlTime ? new Date(indexStatus.lastCrawlTime) : null,
+    googleCanonical: indexStatus.googleCanonical ?? null,
+    userCanonical: indexStatus.userCanonical ?? null,
+    crawledAs: indexStatus.crawledAs ?? null,
+    referringUrls,
+    raw: {
+      inspectionResultLink: result.inspectionResultLink ?? null,
+      verdict: indexStatus.verdict ?? null,
+      coverageState: indexStatus.coverageState ?? null,
+      indexingState: indexStatus.indexingState ?? null,
+      robotsTxtState: indexStatus.robotsTxtState ?? null,
+      pageFetchState: indexStatus.pageFetchState ?? null,
+      lastCrawlTime: indexStatus.lastCrawlTime ?? null,
+      googleCanonical: indexStatus.googleCanonical ?? null,
+      userCanonical: indexStatus.userCanonical ?? null,
+      crawledAs: indexStatus.crawledAs ?? null,
+      referringUrls,
     },
   };
 }

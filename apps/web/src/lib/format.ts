@@ -46,6 +46,18 @@ export function formatRelativeTime(iso: string | null): string {
   return new Date(iso).toLocaleString();
 }
 
+/** Calendar date from an ISO timestamp (local display). */
+export function formatCheckedDate(iso: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return "—";
+  return d.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
 export function formatCountDelta(absolute: number | null, relative: number | null): string | null {
   if (absolute == null) return null;
   const sign = absolute > 0 ? "+" : absolute < 0 ? "" : "";

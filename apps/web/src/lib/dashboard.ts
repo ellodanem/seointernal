@@ -72,6 +72,71 @@ export type AttentionResult = {
   generatedAt: string;
 };
 
+export type IndexingAttentionItem = {
+  id: string;
+  pageUrl: string;
+  label: string;
+  path: string;
+  category: "INDEXING_BLOCKED" | "NOT_INDEXED" | "CANONICAL_MISMATCH" | "INSPECTION_UNKNOWN";
+  categoryLabel: string;
+  reason: string;
+  normalizedStatus: string | null;
+  canonicalState: string | null;
+  coverageState: string | null;
+  lastCrawlTime: string | null;
+  inspectedAt: string | null;
+};
+
+export type IndexingPageRow = {
+  pageId: string;
+  pageUrl: string;
+  label: string;
+  path: string;
+  normalizedStatus: string | null;
+  statusLabel: string;
+  statusDetail: string | null;
+  canonicalState: string | null;
+  canonicalLabel: string;
+  lastCrawlTime: string | null;
+  crawledAs: string | null;
+  crawledAsLabel: string | null;
+  inspectedAt: string | null;
+  neverChecked: boolean;
+  needsReview: boolean;
+  detail: {
+    coverageState: string | null;
+    indexingState: string | null;
+    robotsTxtState: string | null;
+    pageFetchState: string | null;
+    verdict: string | null;
+    userCanonical: string | null;
+    googleCanonical: string | null;
+    indexingAllowed: boolean | null;
+  } | null;
+};
+
+export type DashboardIndexing = {
+  summary: {
+    expectedCount: number;
+    indexedCount: number;
+    needsReviewCount: number;
+    neverCheckedCount: number;
+    healthy: boolean;
+    headline: string;
+    subcopy: string;
+  };
+  freshness: {
+    lastCheckedAt: string | null;
+    lastSuccessAt: string | null;
+    overdue: boolean;
+    refreshFailed: boolean;
+    refreshFailureMessage: string | null;
+    cadenceDays: number;
+  };
+  pages: IndexingPageRow[];
+  attention: IndexingAttentionItem[];
+};
+
 export type ProjectDashboard = {
   project: Pick<
     Project,
@@ -142,6 +207,7 @@ export type ProjectDashboard = {
     summary: string;
   } | null;
   attention: AttentionResult;
+  indexing: DashboardIndexing;
   notes: {
     headlineSource: string;
     aggregationCaveat: string;

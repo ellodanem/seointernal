@@ -1,8 +1,8 @@
 {
   "name": "seo-ops-console",
   "private": true,
-  "version": "0.5.0",
-  "description": "Internal SEO Operations Console — Phase 5 attention & opportunities",
+  "version": "0.6.0",
+  "description": "Internal SEO Operations Console — Phase 6 indexing awareness",
   "workspaces": [
     "apps/*"
   ],
@@ -24,10 +24,13 @@
     "verify:phase3": "npm run test:gsc && tsx --env-file=.env scripts/verify-phase3-db.ts",
     "verify:phase4": "npm run test:dashboard && tsx --env-file=.env scripts/verify-phase4-dashboard.ts",
     "verify:phase5": "npm run test:attention && tsx --env-file=.env scripts/verify-phase5-attention.ts",
+    "verify:phase6": "npm run test:indexing && tsx --env-file=.env scripts/verify-phase6-indexing.ts",
     "test:gsc": "tsx --test apps/server/src/gsc/gsc.test.ts",
     "test:dashboard": "tsx --test apps/server/src/dashboard/dashboard.test.ts",
     "test:attention": "tsx --test apps/server/src/dashboard/attention.test.ts",
+    "test:indexing": "tsx --test apps/server/src/dashboard/indexing.test.ts",
     "gsc:ingest": "tsx --env-file=.env scripts/run-gsc-ingest.ts",
+    "gsc:inspect": "tsx --env-file=.env scripts/run-gsc-inspect.ts",
     "gsc:proof": "tsx --env-file=.env scripts/proof-origin-filtered-queries.ts",
     "gsc:smoke": "tsx --env-file=.env scripts/smoke-gsc-ingest.ts"
   },

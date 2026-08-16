@@ -2,8 +2,16 @@ import { useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { TrendChart } from "../components/TrendChart";
 import { apiGet } from "../lib/api";
-import type { AttentionItem, ComparedMetric, ProjectDashboard } from "../lib/dashboard";
+import type {
+  AttentionItem,
+  ComparedMetric,
+  DashboardIndexing,
+  IndexingAttentionItem,
+  IndexingPageRow,
+  ProjectDashboard,
+} from "../lib/dashboard";
 import {
+  formatCheckedDate,
   formatCountDelta,
   formatCtr,
   formatCtrDelta,
@@ -47,7 +55,8 @@ export function ProjectDetailPage() {
   }
   if (!dashboard) return null;
 
-  const { project, period, freshness, summary, metrics, sitemap, attention } = dashboard;
+  const { project, period, freshness, summary, metrics, sitemap, attention, indexing } =
+    dashboard;
   const dataThrough = formatDataThrough(period.dataThrough || freshness.latestFinalizedDate || "");
 
   function setPeriod(days: number) {
@@ -168,7 +177,13 @@ export function ProjectDetailPage() {
             <TrendChart points={dashboard.trend} />
           </section>
 
-          <AttentionSection items={attention.items} emptyMessage={attention.emptyMessage} />
+          <NeedsAttentionSection
+            indexingItems={indexing.attention}
+            performanceItems={attention.items}
+            performanceEmptyMessage={attention.emptyMessage}
+          />
+
+          <IndexingSection indexing={indexing} />
 
           <section className="panel" aria-labelledby="pages-heading">
             <h2 id="pages-heading">Top pages</h2>
@@ -352,6 +367,8 @@ export function ProjectDetailPage() {
         </>
       )}
 
+      {dashboard.empty ? <IndexingSection indexing={indexing} /> : null}
+
       <section className="panel connection-panel" aria-labelledby="connection-heading">
         <h2 id="connection-heading">Data connection</h2>
         <div className="meta-grid">
@@ -388,29 +405,259 @@ export function ProjectDetailPage() {
   );
 }
 
-function AttentionSection(props: {
-  items: AttentionItem[];
-  emptyMessage: string | null;
+function NeedsAttentionSection(props: {
+  indexingItems: IndexingAttentionItem[];
+  performanceItems: AttentionItem[];
+  performanceEmptyMessage: string | null;
 }) {
+  const hasIndexing = props.indexingItems.length > 0;
+  const hasPerf = props.performanceItems.length > 0;
+  const empty = !hasIndexing && !hasPerf;
+
   return (
     <section className="panel attention-section" aria-labelledby="attention-heading">
       <h2 id="attention-heading">What deserves attention?</h2>
       <p className="muted section-help">
-        These pages are surfaced from Search Console data. Early signals are intentionally
-        conservative.
+        Indexing problems are listed first. Search opportunity signals stay conservative.
       </p>
-      {props.items.length === 0 ? (
-        <p className="attention-empty">{props.emptyMessage ?? "Nothing needs attention yet."}</p>
+      {empty ? (
+        <p className="attention-empty">
+          {props.performanceEmptyMessage ?? "Nothing needs attention yet."}
+        </p>
       ) : (
-        <ul className="attention-list">
-          {props.items.map((item) => (
-            <li key={item.id}>
-              <AttentionCard item={item} />
-            </li>
-          ))}
-        </ul>
+        <div className="attention-groups">
+          {hasIndexing ? (
+            <div>
+              <h3 className="attention-group-title">Indexing</h3>
+              <ul className="attention-list">
+                {props.indexingItems.map((item) => (
+                  <li key={item.id}>
+                    <article
+                      className="attention-card attention-card-indexing"
+                      aria-labelledby={`attention-${item.id}-title`}
+                    >
+                      <div className="attention-card-head">
+                        <div>
+                          <h4 id={`attention-${item.id}-title`} className="attention-page">
+                            {item.label}
+                          </h4>
+                          <p className="muted mono page-path" style={{ margin: "0.15rem 0 0" }}>
+                            {item.path}
+                          </p>
+                        </div>
+                        <div className="attention-tags">
+                          <span className="badge">{item.categoryLabel}</span>
+                        </div>
+                      </div>
+                      <p style={{ margin: 0 }}>{item.reason}</p>
+                    </article>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {hasPerf ? (
+            <div>
+              <h3 className="attention-group-title">Search opportunity</h3>
+              <ul className="attention-list">
+                {props.performanceItems.map((item) => (
+                  <li key={item.id}>
+                    <AttentionCard item={item} />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </div>
       )}
     </section>
+  );
+}
+
+function IndexingSection(props: { indexing: DashboardIndexing }) {
+  const { indexing } = props;
+  const { summary, freshness, pages } = indexing;
+
+  return (
+    <section className="panel indexing-section" aria-labelledby="indexing-heading">
+      <div className="indexing-header">
+        <div>
+          <h2 id="indexing-heading">Indexing</h2>
+          <p className="muted section-help">
+            Google indexing status for pages this project expects to appear in search.
+          </p>
+        </div>
+        <div className="indexing-freshness muted">
+          <div>
+            {freshness.lastCheckedAt
+              ? `Indexing checked ${formatCheckedDate(freshness.lastCheckedAt)}`
+              : "Last indexing check: not yet"}
+          </div>
+          {freshness.overdue ? <div>Check is past the usual weekly cadence.</div> : null}
+          {freshness.refreshFailed ? (
+            <div className="error" role="status">
+              {freshness.refreshFailureMessage ?? "Indexing check could not refresh."}
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="indexing-summary" aria-live="polite">
+        <p className="summary-message" style={{ marginBottom: "0.35rem" }}>
+          <strong>{summary.headline}</strong>
+        </p>
+        <p className="muted" style={{ margin: 0 }}>
+          {summary.subcopy}
+        </p>
+        {summary.expectedCount > 0 &&
+        !summary.healthy &&
+        summary.neverCheckedCount < summary.expectedCount ? (
+          <ul className="indexing-counts">
+            <li>{summary.indexedCount} indexed</li>
+            <li>{summary.needsReviewCount} need review</li>
+          </ul>
+        ) : null}
+      </div>
+
+      {pages.length === 0 ? (
+        <p className="muted">No INDEXABLE pages in the managed inventory.</p>
+      ) : (
+        <>
+          <div className="table-wrap indexing-table-wrap">
+            <table className="data-table indexing-table">
+              <thead>
+                <tr>
+                  <th scope="col">Page</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Last crawl</th>
+                  <th scope="col">Canonical</th>
+                  <th scope="col">Last checked</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pages.map((row) => (
+                  <IndexingRow key={row.pageId} row={row} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <ul className="indexing-cards" aria-label="Indexing pages">
+            {pages.map((row) => (
+              <li key={`card-${row.pageId}`}>
+                <IndexingCard row={row} />
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </section>
+  );
+}
+
+function IndexingRow(props: { row: IndexingPageRow }) {
+  const { row } = props;
+  return (
+    <tr className={row.needsReview ? "indexing-row-review" : undefined}>
+      <td>
+        <details className="page-details">
+          <summary>
+            <span className="page-label">{row.label}</span>
+            <span className="muted mono page-path">{row.path}</span>
+          </summary>
+          <IndexingDetail row={row} />
+        </details>
+      </td>
+      <td>
+        <span className="indexing-status">{row.statusLabel}</span>
+        {row.statusDetail ? <div className="muted small">{row.statusDetail}</div> : null}
+      </td>
+      <td>{formatCheckedDate(row.lastCrawlTime)}</td>
+      <td>{row.canonicalLabel}</td>
+      <td>{formatCheckedDate(row.inspectedAt)}</td>
+    </tr>
+  );
+}
+
+function IndexingCard(props: { row: IndexingPageRow }) {
+  const { row } = props;
+  return (
+    <article className="indexing-card" aria-labelledby={`indexing-${row.pageId}-title`}>
+      <h3 id={`indexing-${row.pageId}-title`} className="attention-page">
+        {row.label}
+      </h3>
+      <p className="muted mono page-path" style={{ margin: "0.15rem 0 0.65rem" }}>
+        {row.path}
+      </p>
+      <dl className="indexing-card-meta">
+        <div>
+          <dt>Status</dt>
+          <dd>{row.statusLabel}</dd>
+        </div>
+        <div>
+          <dt>Last crawl</dt>
+          <dd>{formatCheckedDate(row.lastCrawlTime)}</dd>
+        </div>
+        <div>
+          <dt>Canonical</dt>
+          <dd>{row.canonicalLabel}</dd>
+        </div>
+        <div>
+          <dt>Last checked</dt>
+          <dd>{formatCheckedDate(row.inspectedAt)}</dd>
+        </div>
+      </dl>
+      {row.statusDetail ? <p className="muted small">{row.statusDetail}</p> : null}
+      <details className="attention-queries">
+        <summary>Inspection details</summary>
+        <IndexingDetail row={row} />
+      </details>
+    </article>
+  );
+}
+
+function IndexingDetail(props: { row: IndexingPageRow }) {
+  const { row } = props;
+  if (row.neverChecked || !row.detail) {
+    return <p className="muted small">Not checked yet — no URL Inspection result stored.</p>;
+  }
+  const d = row.detail;
+  return (
+    <dl className="indexing-detail">
+      <div>
+        <dt>Expected URL</dt>
+        <dd className="mono break">{row.pageUrl}</dd>
+      </div>
+      <div>
+        <dt>Google coverage</dt>
+        <dd>{d.coverageState ?? "—"}</dd>
+      </div>
+      <div>
+        <dt>Indexing allowed</dt>
+        <dd>
+          {d.indexingAllowed == null ? d.indexingState ?? "—" : d.indexingAllowed ? "Yes" : "No"}
+        </dd>
+      </div>
+      <div>
+        <dt>Robots</dt>
+        <dd>{d.robotsTxtState ?? "—"}</dd>
+      </div>
+      <div>
+        <dt>Fetch</dt>
+        <dd>{d.pageFetchState ?? "—"}</dd>
+      </div>
+      <div>
+        <dt>Crawled as</dt>
+        <dd>{row.crawledAsLabel ?? row.crawledAs ?? "—"}</dd>
+      </div>
+      <div>
+        <dt>Declared canonical</dt>
+        <dd className="mono break">{d.userCanonical ?? "—"}</dd>
+      </div>
+      <div>
+        <dt>Google canonical</dt>
+        <dd className="mono break">{d.googleCanonical ?? "—"}</dd>
+      </div>
+    </dl>
   );
 }
 

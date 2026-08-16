@@ -35,6 +35,24 @@ const envSchema = z.object({
   GSC_MAX_DAYS_PER_RUN: z.coerce.number().int().positive().default(28),
   /** First-run / catch-up window ending at latest finalized date. */
   GSC_INITIAL_BACKFILL_DAYS: z.coerce.number().int().positive().default(28),
+  /** How often the worker may attempt URL Inspection (default 7 days). */
+  GSC_INSPECT_INTERVAL_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(7 * 24 * 60 * 60 * 1000),
+  /** Skip pages successfully inspected within this window (default = interval). */
+  GSC_INSPECT_FRESHNESS_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(7 * 24 * 60 * 60 * 1000),
+  /** Run one URL Inspection attempt shortly after worker boot. Default false. */
+  GSC_INSPECT_ON_START: z
+    .string()
+    .optional()
+    .default("false")
+    .transform((v) => v === "true" || v === "1"),
   PORT: z.coerce.number().int().positive().default(3000),
 });
 

@@ -105,4 +105,6 @@ npm run verify:phase5
 
 ## Explicitly out of scope
 
-AI copy, Ask SEO, page edits, Git publish, URL Inspection UI, `seo:check`, cannibalization alarms, notifications, workflow boards, SEO scores.
+AI copy, Ask SEO, page edits, Git publish, indexing request buttons, full `seo:check` integration, cannibalization alarms, notifications, workflow boards, SEO scores.
+
+URL Inspection / indexing status: see **`docs/indexing.md`** (Phase 6).

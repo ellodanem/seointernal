@@ -320,30 +320,44 @@ model GscSitemapSnapshot {
   @@map("gsc_sitemap_snapshots")
 }
 
+/// Append-only URL Inspection observations (Phase 6).
+/// Successful inspections are snapshots; failed attempts may be recorded with success=false
+/// and must never replace the latest successful observation when reading dashboard state.
 model GscUrlInspection {
-  id              String    @id @default(cuid())
-  projectId       String
-  gscPropertyId   String
-  pageId          String?
-  inspectedUrl    String
-  inspectedAt     DateTime
-  verdict         String?
-  coverageState   String?
-  indexingState   String?
-  robotsTxtState  String?
-  pageFetchState  String?
-  lastCrawlTime   DateTime?
-  googleCanonical String?
-  userCanonical   String?
-  crawledAs       String?
-  rawResult       Json?
+  id                String    @id @default(cuid())
+  projectId         String
+  gscPropertyId     String
+  pageId            String?
+  inspectedUrl      String
+  inspectedAt       DateTime
+  /// True when Google returned a usable indexStatusResult.
+  success           Boolean   @default(true)
+  errorCode         String?
+  errorMessage      String?
+  verdict           String?
+  coverageState     String?
+  indexingState     String?
+  robotsTxtState    String?
+  pageFetchState    String?
+  lastCrawlTime     DateTime?
+  googleCanonical   String?
+  userCanonical     String?
+  crawledAs         String?
+  /// Deterministic owner-facing status derived at write time.
+  /// INDEXED | NOT_INDEXED | BLOCKED | CANONICALIZED_ELSEWHERE | UNKNOWN
+  normalizedStatus  String?
+  /// ALIGNED | MISMATCH | UNKNOWN — compared against inspected URL.
+  canonicalState    String?
+  /// Compact raw indexStatusResult (+ inspectionResultLink) for debugging.
+  rawResult         Json?
 
   project     Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
   gscProperty GscProperty @relation(fields: [gscPropertyId], references: [id], onDelete: Cascade)
   page        Page?       @relation(fields: [pageId], references: [id], onDelete: SetNull)
 
   @@index([projectId, inspectedAt])
-  @@index([pageId])
+  @@index([pageId, inspectedAt])
+  @@index([projectId, pageId, inspectedAt])
   @@map("gsc_url_inspections")
 }
 

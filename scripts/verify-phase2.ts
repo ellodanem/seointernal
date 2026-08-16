@@ -7,6 +7,8 @@ import {
   GscPropertyType,
   GscMetricScopeType,
   ProjectStatus,
+  PageRole,
+  PageSource,
 } from "@prisma/client";
 
 const prisma = new PrismaClient();
@@ -55,13 +57,16 @@ async function main() {
   console.log("   OK — SRP project + DOMAIN property");
 
   console.log("2) Uniqueness: duplicate projectId+url pages rejected");
-  await prisma.page.deleteMany({ where: { projectId: project.id, url: "https://www.simplerosterplus.com/" } });
+  // Use a throwaway URL — do not delete/recreate managed INDEXABLE inventory pages.
+  const uniqUrl = `https://www.simplerosterplus.com/__phase2-uniqueness-${Date.now()}`;
   await prisma.page.create({
     data: {
       projectId: project.id,
-      url: "https://www.simplerosterplus.com/",
+      url: uniqUrl,
       host: "www.simplerosterplus.com",
-      path: "/",
+      path: "/__phase2-uniqueness",
+      role: PageRole.UNKNOWN,
+      source: PageSource.MANUAL,
     },
   });
   let dupRejected = false;
@@ -69,15 +74,18 @@ async function main() {
     await prisma.page.create({
       data: {
         projectId: project.id,
-        url: "https://www.simplerosterplus.com/",
+        url: uniqUrl,
         host: "www.simplerosterplus.com",
-        path: "/",
+        path: "/__phase2-uniqueness",
+        role: PageRole.UNKNOWN,
+        source: PageSource.MANUAL,
       },
     });
   } catch {
     dupRejected = true;
   }
   assert(dupRejected, "expected unique constraint on projectId+url");
+  await prisma.page.deleteMany({ where: { projectId: project.id, url: uniqUrl } });
   console.log("   OK — page uniqueness");
 
   console.log("3) Metric scopes PROPERTY vs ORIGIN coexist");

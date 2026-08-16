@@ -4,3 +4,8 @@ export * from "./filters.js";
 export * from "./dates.js";
 export * from "./map.js";
 export * from "./client.js";
+export * from "./inspection-types.js";
+export * from "./canonical.js";
+export * from "./normalize-indexing.js";
+export * from "./eligibility.js";
+export * from "./inspection-freshness.js";

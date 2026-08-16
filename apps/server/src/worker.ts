@@ -2,10 +2,11 @@ import { loadEnv } from "./config.js";
 import { log } from "./lib/log.js";
 import { prisma } from "./lib/db.js";
 import { runGscIngestDaily } from "./jobs/gsc-ingest-daily.js";
+import { runGscUrlInspection } from "./jobs/gsc-url-inspection.js";
 
 /**
- * Worker process: Postgres heartbeat + scheduled GSC ingestion.
- * Manual trigger: npm run gsc:ingest (does not require UI).
+ * Worker process: Postgres heartbeat + scheduled GSC ingest + weekly URL Inspection.
+ * Manual triggers: npm run gsc:ingest | npm run gsc:inspect (not public HTTP).
  */
 async function main() {
   const env = loadEnv();
@@ -15,6 +16,8 @@ async function main() {
     gscCredentialsConfigured: env.gscCredentialsConfigured,
     ingestIntervalMs: env.GSC_INGEST_INTERVAL_MS,
     ingestOnStart: env.GSC_INGEST_ON_START,
+    inspectIntervalMs: env.GSC_INSPECT_INTERVAL_MS,
+    inspectOnStart: env.GSC_INSPECT_ON_START,
   });
 
   await prisma.$queryRaw`SELECT 1`;
@@ -22,9 +25,10 @@ async function main() {
 
   let stopping = false;
   let ingestRunning = false;
-  // Initialize to now so the first scheduled tick respects GSC_INGEST_INTERVAL_MS
-  // when GSC_INGEST_ON_START is false.
+  let inspectRunning = false;
+  // Initialize to now so the first scheduled tick respects intervals when ON_START is false.
   let lastIngestAttemptAt = Date.now();
+  let lastInspectAttemptAt = Date.now();
 
   const runIngestIfDue = async (reason: "start" | "schedule") => {
     if (stopping || ingestRunning) return;
@@ -54,10 +58,40 @@ async function main() {
         latestFinalizedDate: result.stats.latestFinalizedDate,
       });
     } catch (err) {
-      // Failure must not kill the worker or future scheduled runs.
       log.error("gsc ingest failed", { error: String(err) });
     } finally {
       ingestRunning = false;
+    }
+  };
+
+  const runInspectIfDue = async (reason: "start" | "schedule") => {
+    if (stopping || inspectRunning) return;
+    if (!env.gscCredentialsConfigured || !env.GOOGLE_APPLICATION_CREDENTIALS) {
+      return;
+    }
+
+    const now = Date.now();
+    if (reason === "schedule" && now - lastInspectAttemptAt < env.GSC_INSPECT_INTERVAL_MS) {
+      return;
+    }
+
+    inspectRunning = true;
+    lastInspectAttemptAt = now;
+    try {
+      log.info("gsc url inspection triggered", { reason });
+      const result = await runGscUrlInspection({
+        credentialsPath: env.GOOGLE_APPLICATION_CREDENTIALS,
+        freshnessMs: env.GSC_INSPECT_FRESHNESS_MS,
+      });
+      log.info("gsc url inspection ok", {
+        jobRunId: result.jobRunId,
+        pagesInspected: result.stats.pagesInspected,
+        pagesSkippedFresh: result.stats.pagesSkippedFresh,
+      });
+    } catch (err) {
+      log.error("gsc url inspection failed", { error: String(err) });
+    } finally {
+      inspectRunning = false;
     }
   };
 
@@ -70,6 +104,7 @@ async function main() {
       log.error("worker heartbeat failed", { error: String(err) });
     }
     await runIngestIfDue("schedule");
+    await runInspectIfDue("schedule");
   };
 
   const interval = setInterval(() => void tick(), env.WORKER_IDLE_MS);
@@ -77,11 +112,10 @@ async function main() {
   const shutdown = async (signal: string) => {
     if (stopping) return;
     stopping = true;
-    log.info("worker shutting down", { signal, ingestRunning });
+    log.info("worker shutting down", { signal, ingestRunning, inspectRunning });
     clearInterval(interval);
-    // Wait briefly if ingest is in-flight (transactional day writes are atomic).
     const deadline = Date.now() + 30_000;
-    while (ingestRunning && Date.now() < deadline) {
+    while ((ingestRunning || inspectRunning) && Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, 250));
     }
     await prisma.$disconnect();
@@ -95,6 +129,9 @@ async function main() {
 
   if (env.GSC_INGEST_ON_START) {
     void runIngestIfDue("start");
+  }
+  if (env.GSC_INSPECT_ON_START) {
+    void runInspectIfDue("start");
   }
 }
 

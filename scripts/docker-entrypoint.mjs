@@ -33,8 +33,12 @@ async function main() {
     console.log("Running GSC ingest...");
     const extra = process.argv.slice(3);
     await run("node", ["apps/server/dist/cli-gsc-ingest.js", ...extra]);
+  } else if (role === "inspect") {
+    console.log("Running GSC URL Inspection...");
+    const extra = process.argv.slice(3);
+    await run("node", ["apps/server/dist/cli-gsc-inspect.js", ...extra]);
   } else {
-    throw new Error(`Unknown role: ${role} (expected web|worker|seed|ingest)`);
+    throw new Error(`Unknown role: ${role} (expected web|worker|seed|ingest|inspect)`);
   }
 }
 

@@ -1,14 +1,18 @@
-import { GscMetricScopeType } from "@prisma/client";
+import { GscMetricScopeType, PageRole } from "@prisma/client";
 import { prisma } from "../lib/db.js";
 import { daysBetweenInclusive, parseYmd } from "../gsc/dates.js";
 import { normalizeOrigin, urlBelongsToOrigin } from "../gsc/filters.js";
+import { loadEnv } from "../config.js";
 import { generateAttention } from "./attention.js";
 import type { AttentionPageInput, AttentionQueryInput } from "./attention-types.js";
+import { composeAttention } from "./compose-attention.js";
 import {
   aggregateDailyMetrics,
   comparePeriodMetrics,
   type PeriodMetrics,
 } from "./compare.js";
+import { buildDashboardIndexing, emptyDashboardIndexing } from "./indexing.js";
+import type { DashboardIndexing } from "./indexing-types.js";
 import { hostKeyFromPageUrl, humanizePageUrl } from "./page-label.js";
 import {
   DEFAULT_DASHBOARD_PERIOD,
@@ -18,7 +22,7 @@ import {
 } from "./periods.js";
 import type { ProjectDashboard } from "./types.js";
 import { classifyVisibility } from "./visibility.js";
-
+import { GSC_URL_INSPECTION_JOB_NAME } from "../jobs/gsc-url-inspection.js";
 const TOP_LIMIT = 15;
 const AGGREGATION_CAVEAT =
   "Search Console totals, pages, and queries are separate datasets and may not add up exactly.";
@@ -95,6 +99,7 @@ export async function getProjectDashboard(args: {
   const latestFinalizedYmd = latestOrigin?.date.toISOString().slice(0, 10) ?? null;
 
   if (!primary || !latestFinalizedYmd || storedYmds.length === 0) {
+    const indexing = await loadIndexingSection(project.id, project.primaryOrigin);
     return emptyDashboard({
       project,
       periodDays: DEFAULT_DASHBOARD_PERIOD,
@@ -102,6 +107,7 @@ export async function getProjectDashboard(args: {
       lastSuccessAt: lastSuccess?.finishedAt ?? null,
       primary,
       lastJob,
+      indexing,
     });
   }
 
@@ -248,7 +254,7 @@ export async function getProjectDashboard(args: {
       position: r.position,
     }));
 
-  const attention = generateAttention({
+  const attentionRaw = generateAttention({
     pages: attentionPages,
     queries: attentionQueries,
     hasFullPrevious: periods.hasFullPrevious,
@@ -257,6 +263,20 @@ export async function getProjectDashboard(args: {
     projectPreviousImpressions: previousForCompare?.impressions ?? null,
     projectCurrentImpressions: currentMetrics.impressions,
   });
+
+  const indexing = await loadIndexingSection(project.id, project.primaryOrigin);
+  const composed = composeAttention({ indexing, performance: attentionRaw });
+  const attention = {
+    ...attentionRaw,
+    items: composed.performance,
+    emptyMessage:
+      composed.performance.length === 0
+        ? attentionRaw.emptyMessage ??
+          (composed.performanceSuppressedCount > 0
+            ? "Search opportunity cards are hidden while indexing issues need attention on those pages."
+            : null)
+        : null,
+  };
 
   return {
     project: mapProject(project),
@@ -294,6 +314,7 @@ export async function getProjectDashboard(args: {
     ),
     sitemap: mapSitemap(sitemapSnap),
     attention,
+    indexing,
     notes: {
       headlineSource: "gsc_daily_totals:ORIGIN",
       aggregationCaveat: AGGREGATION_CAVEAT,
@@ -316,6 +337,7 @@ function emptyDashboard(args: {
   lastSuccessAt: Date | null;
   primary: { siteUrl: string; status: string; lastError: string | null } | undefined;
   lastJob: { status: string; error: string | null; finishedAt: Date | null } | null;
+  indexing?: DashboardIndexing;
 }): ProjectDashboard {
   const { periodDays } = args;
   return {
@@ -360,12 +382,60 @@ function emptyDashboard(args: {
       projectPreviousImpressions: null,
       projectCurrentImpressions: 0,
     }),
+    indexing: args.indexing ?? emptyDashboardIndexing(),
     notes: {
       headlineSource: "gsc_daily_totals:ORIGIN",
       aggregationCaveat: AGGREGATION_CAVEAT,
     },
     empty: true,
   };
+}
+
+async function loadIndexingSection(projectId: string, primaryOrigin: string) {
+  const env = loadEnv();
+  const [pages, latestSuccessful, lastInspectJob, lastInspectSuccess] = await Promise.all([
+    prisma.page.findMany({
+      where: { projectId, role: PageRole.INDEXABLE },
+      orderBy: { path: "asc" },
+    }),
+    prisma.gscUrlInspection.findMany({
+      where: { projectId, success: true, pageId: { not: null } },
+      orderBy: { inspectedAt: "desc" },
+    }),
+    prisma.jobRun.findFirst({
+      where: {
+        jobName: GSC_URL_INSPECTION_JOB_NAME,
+        OR: [{ projectId }, { projectId: null }],
+      },
+      orderBy: { startedAt: "desc" },
+    }),
+    prisma.jobRun.findFirst({
+      where: {
+        jobName: GSC_URL_INSPECTION_JOB_NAME,
+        status: "SUCCEEDED",
+        OR: [{ projectId }, { projectId: null }],
+      },
+      orderBy: { finishedAt: "desc" },
+    }),
+  ]);
+
+  // Keep only the newest successful row per pageId.
+  const seen = new Set<string>();
+  const latestPerPage = [];
+  for (const row of latestSuccessful) {
+    if (!row.pageId || seen.has(row.pageId)) continue;
+    seen.add(row.pageId);
+    latestPerPage.push(row);
+  }
+
+  return buildDashboardIndexing({
+    pages,
+    primaryOrigin,
+    latestSuccessful: latestPerPage,
+    lastInspectJob,
+    lastInspectSuccessAt: lastInspectSuccess?.finishedAt ?? null,
+    cadenceMs: env.GSC_INSPECT_INTERVAL_MS,
+  });
 }
 
 /** All primary-origin pages in the window (not limited to top-N table). */
