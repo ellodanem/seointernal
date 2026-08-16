@@ -1,4 +1,6 @@
-# Phase 4 complete — Phase 5 handoff
+# Phase 4 complete — Phase 5 handoff (historical)
+
+Phase 5 is implemented. See **`docs/phase-6-handoff.md`**, **`docs/attention.md`**, **`docs/dashboard.md`**, and **`docs/architecture.md`**.
 
 ## Phase 4 delivered
 
@@ -10,31 +12,16 @@
 - Period windows anchored to latest finalized stored date (7 / 28; 90 when history allows)
 - Optional history extension via existing `gsc:ingest --backfill-days 56` (SRP now has 56 ORIGIN days)
 
-## Docs
-
-- `docs/dashboard.md` — data sources, periods, comparisons, caveats
-- `docs/architecture.md` — still authoritative for ingest; dashboard reads those tables
-
-## What the SRP dashboard revealed
+## What the SRP dashboard revealed (at Phase 4 freeze)
 
 - Primary-origin visibility is low but non-zero (clicks in the single digits over 28 days; ~1k impressions).
 - Prior 28 days are extremely thin (~6 impressions), so trend classification stays **insufficient** despite a full comparison window.
 - `app.simplerosterplus.com` still appears in page history (informational Other hosts).
 - Sitemap snapshot is healthy (7 submitted, 0 errors/warnings).
 
-## Recommended Phase 5 (narrow)
+## Phase 5 goal (completed)
 
-Smallest next step toward “what should I work on next, and why?”:
-
-**Cautious page-level attention list** — not a full recommendation engine.
-
-Suggested scope:
-
-1. From ORIGIN top pages + query×page rollup, surface 3–5 pages that matter (impressions, clicks, or clear zero-click visibility).
-2. For each, show *facts only* plus one cautious template reason (e.g. “appears often, few clicks”) with explicit uncertainty.
-3. Still no AI copy, no content briefs, no Git publish, no URL Inspection product UI unless needed to answer indexing questions for those pages.
-
-Defer: scoring, alerts, competitors, GA4, Bing, agency features.
+Cautious page-level attention list — not a full recommendation engine. See `docs/attention.md`.
 
 ## Do not reopen
 

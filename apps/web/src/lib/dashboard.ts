@@ -2,6 +2,16 @@ import type { Project } from "./types";
 
 export type VisibilityCategory = "improving" | "stable" | "declining" | "insufficient";
 
+export type AttentionCategory =
+  | "WORTH_WATCHING"
+  | "NEAR_STRONGER_VISIBILITY"
+  | "VISIBILITY_CHANGE"
+  | "STRONG_VISIBILITY_LOW_ENGAGEMENT";
+
+export type AttentionStance = "watch" | "review" | "leave_alone" | "monitor_momentum";
+
+export type AttentionConfidence = "early" | "moderate" | "strong";
+
 export type MetricDelta = {
   absolute: number | null;
   relative: number | null;
@@ -27,6 +37,39 @@ export type PeriodMetrics = {
   impressions: number;
   ctr: number;
   position: number;
+};
+
+export type AttentionItem = {
+  id: string;
+  pageUrl: string;
+  label: string;
+  path: string;
+  category: AttentionCategory;
+  categoryLabel: string;
+  confidence: AttentionConfidence;
+  reason: string;
+  stance: AttentionStance;
+  stanceLabel: string;
+  metrics: PeriodMetrics;
+  previous: PeriodMetrics | null;
+  comparisonEligible: boolean;
+  changeDirection: "increase" | "decrease" | null;
+  supportingQueries: Array<{
+    query: string;
+    clicks: number;
+    impressions: number;
+    ctr: number;
+    position: number;
+  }>;
+  dataThrough: string;
+  generatedAt: string;
+};
+
+export type AttentionResult = {
+  items: AttentionItem[];
+  emptyMessage: string | null;
+  immature: boolean;
+  generatedAt: string;
 };
 
 export type ProjectDashboard = {
@@ -98,6 +141,7 @@ export type ProjectDashboard = {
     healthy: boolean;
     summary: string;
   } | null;
+  attention: AttentionResult;
   notes: {
     headlineSource: string;
     aggregationCaveat: string;

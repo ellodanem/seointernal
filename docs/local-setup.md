@@ -100,9 +100,9 @@ $env:GSC_SA_HOST_PATH = "C:\Users\Dane\.seo-console\gsc-sa.json"
 docker compose -f docker-compose.yml -f docker-compose.gsc.yml up --build
 ```
 
-Open http://localhost:3000 — sign in, then **Seed Simple Roster Plus** if needed. Open a project to view the Phase 4 owner dashboard.
+Open http://localhost:3000 — sign in, then **Seed Simple Roster Plus** if needed. Open a project to view the owner dashboard (visibility + attention).
 
-Dashboard semantics: **`docs/dashboard.md`**.
+Dashboard: **`docs/dashboard.md`**. Attention: **`docs/attention.md`**.
 
 ## Verification
 
@@ -112,6 +112,7 @@ npm run build
 npm run verify:phase2
 npm run verify:phase3   # unit + DB integration
 npm run verify:phase4   # dashboard unit + real-data reconciliation
+npm run verify:phase5   # attention unit + real-data SRP review
 npm run gsc:smoke       # optional live GSC
 ```
 

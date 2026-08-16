@@ -1,3 +1,6 @@
+export * from "./attention.js";
+export * from "./attention-thresholds.js";
+export * from "./attention-types.js";
 export * from "./compare.js";
 export * from "./page-label.js";
 export * from "./periods.js";

@@ -1,3 +1,4 @@
+import type { AttentionResult } from "./attention-types.js";
 import type { ComparedMetrics, PeriodMetrics } from "./compare.js";
 import type { DashboardPeriodDays, ReportingPeriods } from "./periods.js";
 import type { VisibilitySummary } from "./visibility.js";
@@ -88,6 +89,8 @@ export type ProjectDashboard = {
   topQueries: DashboardQueryRow[];
   otherHosts: DashboardOtherHost[];
   sitemap: DashboardSitemap | null;
+  /** Phase 5 — derived page attention (not persisted). */
+  attention: AttentionResult;
   notes: {
     /** Headline metrics come from gsc_daily_totals ORIGIN scope. */
     headlineSource: "gsc_daily_totals:ORIGIN";

@@ -1,16 +1,16 @@
-# Architecture (Phase 4)
+# Architecture (Phase 5)
 
 ## Purpose
 
 Portable internal SEO Operations Console. Multi-**project** data model (not multi-tenant SaaS). One owner, Google allowlist, no public registration.
 
-Simple Roster Plus is Project #1. Phase 3 stores trusted GSC history. Phase 4 adds an **understandable owner dashboard** that reads that history (ORIGIN-scoped headlines).
+Simple Roster Plus is Project #1. Phase 3 stores trusted GSC history. Phase 4 adds an **understandable owner dashboard**. Phase 5 adds **cautious page-level Attention & Opportunities** derived from that history (still no AI).
 
 ## Process shape
 
 | Process | Entry | Responsibility |
 |---------|-------|----------------|
-| **web** | `apps/server/dist/index.js` | Hono HTTP API, Better Auth, static UI, dashboard reads |
+| **web** | `apps/server/dist/index.js` | Hono HTTP API, Better Auth, static UI, dashboard + attention reads |
 | **worker** | `apps/server/dist/worker.js` | Scheduled `gsc_ingest_daily` + DB heartbeat |
 | **CLI** | `npm run gsc:ingest` | Manual / backfill trigger (not a public HTTP endpoint) |
 
@@ -28,14 +28,14 @@ No Redis, BullMQ, or external queues. Concurrency uses PostgreSQL advisory locks
 | Dataset | Scope | Notes |
 |---------|-------|-------|
 | Daily totals | PROPERTY + ORIGIN | Both persisted; **dashboard headlines use ORIGIN** |
-| Page daily | Domain property (all hosts) | Top pages filter to primary origin; Other hosts uses the rest |
+| Page daily | Domain property (all hosts) | Top pages + attention filter to primary origin; Other hosts uses the rest |
 | Query daily | **ORIGIN only** | Page `contains` filter on primary origin |
-| Query × page | ORIGIN rolling 28-day snapshot | Replace on refresh; not daily pair history |
+| Query × page | ORIGIN rolling 28-day snapshot | Supporting evidence under attention cards |
 | Sitemaps | Append-only snapshots | Ignore deprecated `indexed` |
 
 Proven (Phase 3 filtered-query gate): Search Analytics `dimensionFilterGroups` with `dimension=page`, `operator=contains`, `expression=<primaryOrigin>` excludes app-host pages and query×page pairs.
 
-Dashboard details: **`docs/dashboard.md`**.
+Dashboard: **`docs/dashboard.md`**. Attention: **`docs/attention.md`**.
 
 ## Finalized-data semantics
 
@@ -44,8 +44,11 @@ Dashboard details: **`docs/dashboard.md`**.
 - Incomplete `dataState=all` rows are never written to durable daily tables.
 - Dashboard phrase: “Search data through \<latest ORIGIN total date\>”.
 - Reporting windows always end on that stored finalized date.
+- Attention uses the same windows.
 
 ## Ingestion flow (`gsc_ingest_daily`)
+
+Unchanged from Phase 3/4. Attention does not write tables.
 
 For each active project / primary GSC property:
 
@@ -91,18 +94,20 @@ For each active project / primary GSC property:
 
 ## Schema overview
 
-Unchanged Phase 2/3 tables; Phase 4 is read-only over:
+Unchanged Phase 2/3 tables; Phase 4–5 are read-only over:
 
 `projects`, `gsc_properties`, `pages`, `gsc_daily_totals`, `gsc_page_daily`, `gsc_query_daily`, `gsc_query_page_rollups`, `gsc_sitemap_snapshots`, `job_runs`
+
+No attention/recommendations persistence table in Phase 5.
 
 ## Repo layout
 
 ```
 apps/server/src/gsc/         GSC client (auth, filters, dates, mapping, errors)
 apps/server/src/jobs/        gsc_ingest_daily + advisory locks
-apps/server/src/dashboard/   period/compare/visibility + dashboard service
+apps/server/src/dashboard/   period/compare/visibility/attention + dashboard service
 apps/web/src/pages/          owner dashboard UI
-scripts/                     proof, ingest CLI, smoke, DB / dashboard verify
-docs/                        architecture / setup / handoffs / dashboard
+scripts/                     proof, ingest CLI, smoke, DB / dashboard / attention verify
+docs/                        architecture / setup / handoffs / dashboard / attention
 spike-gsc/                   Phase 1 evidence only
 ```

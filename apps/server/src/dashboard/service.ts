@@ -2,6 +2,8 @@ import { GscMetricScopeType } from "@prisma/client";
 import { prisma } from "../lib/db.js";
 import { daysBetweenInclusive, parseYmd } from "../gsc/dates.js";
 import { normalizeOrigin, urlBelongsToOrigin } from "../gsc/filters.js";
+import { generateAttention } from "./attention.js";
+import type { AttentionPageInput, AttentionQueryInput } from "./attention-types.js";
 import {
   aggregateDailyMetrics,
   comparePeriodMetrics,
@@ -120,55 +122,72 @@ export async function getProjectDashboard(args: {
   const previousStart = parseYmd(periods.previous.startDate);
   const previousEnd = parseYmd(periods.previous.endDate);
 
-  const [originTotals, pageRows, queryRows, sitemapSnap] = await Promise.all([
-    prisma.gscDailyTotal.findMany({
-      where: {
-        projectId: project.id,
-        gscPropertyId: primary.id,
-        scopeType: GscMetricScopeType.ORIGIN,
-        scopeValue: origin,
-        date: { gte: previousStart, lte: currentEnd },
-      },
-      orderBy: { date: "asc" },
-    }),
-    prisma.gscPageDaily.findMany({
-      where: {
-        projectId: project.id,
-        gscPropertyId: primary.id,
-        date: { gte: previousStart, lte: currentEnd },
-      },
-      select: {
-        date: true,
-        pageUrl: true,
-        host: true,
-        clicks: true,
-        impressions: true,
-        ctr: true,
-        position: true,
-      },
-    }),
-    prisma.gscQueryDaily.findMany({
-      where: {
-        projectId: project.id,
-        gscPropertyId: primary.id,
-        scopeType: GscMetricScopeType.ORIGIN,
-        scopeValue: origin,
-        date: { gte: previousStart, lte: currentEnd },
-      },
-      select: {
-        date: true,
-        query: true,
-        clicks: true,
-        impressions: true,
-        ctr: true,
-        position: true,
-      },
-    }),
-    prisma.gscSitemapSnapshot.findFirst({
-      where: { projectId: project.id, gscPropertyId: primary.id },
-      orderBy: { capturedAt: "desc" },
-    }),
-  ]);
+  const [originTotals, pageRows, queryRows, sitemapSnap, queryPageRollups] =
+    await Promise.all([
+      prisma.gscDailyTotal.findMany({
+        where: {
+          projectId: project.id,
+          gscPropertyId: primary.id,
+          scopeType: GscMetricScopeType.ORIGIN,
+          scopeValue: origin,
+          date: { gte: previousStart, lte: currentEnd },
+        },
+        orderBy: { date: "asc" },
+      }),
+      prisma.gscPageDaily.findMany({
+        where: {
+          projectId: project.id,
+          gscPropertyId: primary.id,
+          date: { gte: previousStart, lte: currentEnd },
+        },
+        select: {
+          date: true,
+          pageUrl: true,
+          host: true,
+          clicks: true,
+          impressions: true,
+          ctr: true,
+          position: true,
+        },
+      }),
+      prisma.gscQueryDaily.findMany({
+        where: {
+          projectId: project.id,
+          gscPropertyId: primary.id,
+          scopeType: GscMetricScopeType.ORIGIN,
+          scopeValue: origin,
+          date: { gte: previousStart, lte: currentEnd },
+        },
+        select: {
+          date: true,
+          query: true,
+          clicks: true,
+          impressions: true,
+          ctr: true,
+          position: true,
+        },
+      }),
+      prisma.gscSitemapSnapshot.findFirst({
+        where: { projectId: project.id, gscPropertyId: primary.id },
+        orderBy: { capturedAt: "desc" },
+      }),
+      prisma.gscQueryPageRollup.findMany({
+        where: {
+          projectId: project.id,
+          gscPropertyId: primary.id,
+          scopeType: GscMetricScopeType.ORIGIN,
+          scopeValue: origin,
+        },
+        select: {
+          query: true,
+          pageUrl: true,
+          clicks: true,
+          impressions: true,
+          ctr: true,
+          position: true,
+        },
+      }),
+    ]);
 
   const currentTotals = originTotals.filter((r) => inWindow(r.date, currentStart, currentEnd));
   const previousTotals = originTotals.filter((r) => inWindow(r.date, previousStart, previousEnd));
@@ -186,6 +205,59 @@ export async function getProjectDashboard(args: {
     periodDays,
   });
 
+  const topPages = buildTopEntities({
+    rows: pageRows,
+    keyOf: (r) => r.pageUrl,
+    include: (r) => urlBelongsToOrigin(r.pageUrl, origin),
+    currentStart,
+    currentEnd,
+    previousStart,
+    previousEnd,
+    hasFullPrevious: periods.hasFullPrevious,
+    limit: TOP_LIMIT,
+    mapRow: (key, metricsRow, previous, delta) => {
+      const { label, path } = humanizePageUrl(key);
+      return {
+        pageUrl: key,
+        label,
+        path,
+        ...metricsRow,
+        previous,
+        delta,
+      };
+    },
+  });
+
+  const attentionPages = buildAttentionPageInputs({
+    rows: pageRows,
+    origin,
+    currentStart,
+    currentEnd,
+    previousStart,
+    previousEnd,
+    hasFullPrevious: periods.hasFullPrevious,
+  });
+  const attentionQueries: AttentionQueryInput[] = queryPageRollups
+    .filter((r) => urlBelongsToOrigin(r.pageUrl, origin))
+    .map((r) => ({
+      pageUrl: r.pageUrl,
+      query: r.query,
+      clicks: r.clicks,
+      impressions: r.impressions,
+      ctr: r.ctr,
+      position: r.position,
+    }));
+
+  const attention = generateAttention({
+    pages: attentionPages,
+    queries: attentionQueries,
+    hasFullPrevious: periods.hasFullPrevious,
+    dataThrough: periods.dataThrough,
+    periodDays,
+    projectPreviousImpressions: previousForCompare?.impressions ?? null,
+    projectCurrentImpressions: currentMetrics.impressions,
+  });
+
   return {
     project: mapProject(project),
     period: { ...periods, requestedDays: periodDays },
@@ -198,28 +270,7 @@ export async function getProjectDashboard(args: {
     summary,
     metrics,
     trend: buildTrend(periods.current.startDate, periods.current.endDate, currentTotals),
-    topPages: buildTopEntities({
-      rows: pageRows,
-      keyOf: (r) => r.pageUrl,
-      include: (r) => urlBelongsToOrigin(r.pageUrl, origin),
-      currentStart,
-      currentEnd,
-      previousStart,
-      previousEnd,
-      hasFullPrevious: periods.hasFullPrevious,
-      limit: TOP_LIMIT,
-      mapRow: (key, metricsRow, previous, delta) => {
-        const { label, path } = humanizePageUrl(key);
-        return {
-          pageUrl: key,
-          label,
-          path,
-          ...metricsRow,
-          previous,
-          delta,
-        };
-      },
-    }),
+    topPages,
     topQueries: buildTopEntities({
       rows: queryRows,
       keyOf: (r) => r.query,
@@ -242,6 +293,7 @@ export async function getProjectDashboard(args: {
       origin,
     ),
     sitemap: mapSitemap(sitemapSnap),
+    attention,
     notes: {
       headlineSource: "gsc_daily_totals:ORIGIN",
       aggregationCaveat: AGGREGATION_CAVEAT,
@@ -299,12 +351,67 @@ function emptyDashboard(args: {
     topQueries: [],
     otherHosts: [],
     sitemap: null,
+    attention: generateAttention({
+      pages: [],
+      queries: [],
+      hasFullPrevious: false,
+      dataThrough: args.latestFinalizedYmd ?? "",
+      periodDays,
+      projectPreviousImpressions: null,
+      projectCurrentImpressions: 0,
+    }),
     notes: {
       headlineSource: "gsc_daily_totals:ORIGIN",
       aggregationCaveat: AGGREGATION_CAVEAT,
     },
     empty: true,
   };
+}
+
+/** All primary-origin pages in the window (not limited to top-N table). */
+function buildAttentionPageInputs(args: {
+  rows: Array<{
+    date: Date;
+    pageUrl: string;
+    clicks: number;
+    impressions: number;
+    ctr: number;
+    position: number;
+  }>;
+  origin: string;
+  currentStart: Date;
+  currentEnd: Date;
+  previousStart: Date;
+  previousEnd: Date;
+  hasFullPrevious: boolean;
+}): AttentionPageInput[] {
+  const currentMap = new Map<string, DailyRow[]>();
+  const previousMap = new Map<string, DailyRow[]>();
+
+  for (const row of args.rows) {
+    if (!urlBelongsToOrigin(row.pageUrl, args.origin)) continue;
+    if (inWindow(row.date, args.currentStart, args.currentEnd)) {
+      const list = currentMap.get(row.pageUrl) ?? [];
+      list.push(row);
+      currentMap.set(row.pageUrl, list);
+    } else if (inWindow(row.date, args.previousStart, args.previousEnd)) {
+      const list = previousMap.get(row.pageUrl) ?? [];
+      list.push(row);
+      previousMap.set(row.pageUrl, list);
+    }
+  }
+
+  return [...currentMap.entries()].map(([pageUrl, list]) => {
+    const current = aggregateDailyMetrics(list);
+    let previous: PeriodMetrics | null = null;
+    if (args.hasFullPrevious) {
+      previous = previousMap.has(pageUrl)
+        ? aggregateDailyMetrics(previousMap.get(pageUrl)!)
+        : { clicks: 0, impressions: 0, ctr: 0, position: 0 };
+    }
+    const { label, path } = humanizePageUrl(pageUrl);
+    return { pageUrl, label, path, current, previous };
+  });
 }
 
 function mapProject(project: {

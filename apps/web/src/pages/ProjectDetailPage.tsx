@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { TrendChart } from "../components/TrendChart";
 import { apiGet } from "../lib/api";
-import type { ComparedMetric, ProjectDashboard } from "../lib/dashboard";
+import type { AttentionItem, ComparedMetric, ProjectDashboard } from "../lib/dashboard";
 import {
   formatCountDelta,
   formatCtr,
@@ -47,7 +47,7 @@ export function ProjectDetailPage() {
   }
   if (!dashboard) return null;
 
-  const { project, period, freshness, summary, metrics, sitemap } = dashboard;
+  const { project, period, freshness, summary, metrics, sitemap, attention } = dashboard;
   const dataThrough = formatDataThrough(period.dataThrough || freshness.latestFinalizedDate || "");
 
   function setPeriod(days: number) {
@@ -95,9 +95,7 @@ export function ProjectDetailPage() {
           </p>
         </div>
         <div className="freshness-meta muted">
-          <div>
-            Last ingest: {formatRelativeTime(freshness.lastSuccessAt)}
-          </div>
+          <div>Last ingest: {formatRelativeTime(freshness.lastSuccessAt)}</div>
           <div>
             Latest finalized:{" "}
             <span className="mono">{freshness.latestFinalizedDate ?? "—"}</span>
@@ -169,6 +167,8 @@ export function ProjectDetailPage() {
             </p>
             <TrendChart points={dashboard.trend} />
           </section>
+
+          <AttentionSection items={attention.items} emptyMessage={attention.emptyMessage} />
 
           <section className="panel" aria-labelledby="pages-heading">
             <h2 id="pages-heading">Top pages</h2>
@@ -385,6 +385,116 @@ export function ProjectDetailPage() {
         ) : null}
       </section>
     </div>
+  );
+}
+
+function AttentionSection(props: {
+  items: AttentionItem[];
+  emptyMessage: string | null;
+}) {
+  return (
+    <section className="panel attention-section" aria-labelledby="attention-heading">
+      <h2 id="attention-heading">What deserves attention?</h2>
+      <p className="muted section-help">
+        These pages are surfaced from Search Console data. Early signals are intentionally
+        conservative.
+      </p>
+      {props.items.length === 0 ? (
+        <p className="attention-empty">{props.emptyMessage ?? "Nothing needs attention yet."}</p>
+      ) : (
+        <ul className="attention-list">
+          {props.items.map((item) => (
+            <li key={item.id}>
+              <AttentionCard item={item} />
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function confidenceText(c: AttentionItem["confidence"]): string {
+  if (c === "early") return "Early signal";
+  if (c === "moderate") return "Moderate evidence";
+  return "Strong evidence";
+}
+
+function AttentionCard(props: { item: AttentionItem }) {
+  const { item } = props;
+  const prevImpr = item.previous?.impressions;
+  const showPrev =
+    item.comparisonEligible && prevImpr != null
+      ? `${formatInt(prevImpr)} prev`
+      : item.previous != null && item.previous.impressions > 0
+        ? `${formatInt(item.previous.impressions)} prev (thin)`
+        : null;
+
+  return (
+    <article className="attention-card" aria-labelledby={`attention-${item.id}-title`}>
+      <div className="attention-card-head">
+        <div>
+          <h3 id={`attention-${item.id}-title`} className="attention-page">
+            {item.label}
+          </h3>
+          <p className="muted mono page-path" style={{ margin: "0.15rem 0 0" }}>
+            {item.path}
+          </p>
+        </div>
+        <div className="attention-tags">
+          <span className="badge">{item.categoryLabel}</span>
+          <span className="badge">{confidenceText(item.confidence)}</span>
+        </div>
+      </div>
+
+      <div className="attention-metrics" aria-label="Page metrics">
+        <div>
+          <span className="attention-metric-label">Impressions</span>
+          <span className="attention-metric-value">{formatInt(item.metrics.impressions)}</span>
+          {showPrev ? <span className="muted small">{showPrev}</span> : null}
+        </div>
+        <div>
+          <span className="attention-metric-label">Clicks</span>
+          <span className="attention-metric-value">{formatInt(item.metrics.clicks)}</span>
+        </div>
+        <div>
+          <span className="attention-metric-label">Avg position</span>
+          <span className="attention-metric-value">{formatPosition(item.metrics.position)}</span>
+        </div>
+        <div>
+          <span className="attention-metric-label">CTR</span>
+          <span className="attention-metric-value">{formatCtr(item.metrics.ctr)}</span>
+        </div>
+      </div>
+
+      <div className="attention-reason">
+        <h4 className="attention-subhead">Why this is here</h4>
+        <p>{item.reason}</p>
+      </div>
+
+      <div className="attention-stance">
+        <h4 className="attention-subhead">Suggested stance</h4>
+        <p>
+          <strong>{item.stanceLabel}</strong>
+        </p>
+      </div>
+
+      {item.supportingQueries.length > 0 ? (
+        <details className="attention-queries">
+          <summary>Top associated searches ({item.supportingQueries.length})</summary>
+          <ul>
+            {item.supportingQueries.map((q) => (
+              <li key={q.query}>
+                <span className="query-cell">{q.query}</span>
+                <span className="muted small">
+                  {formatInt(q.impressions)} impr · {formatPosition(q.position)} avg
+                </span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
+    </article>
   );
 }
 
